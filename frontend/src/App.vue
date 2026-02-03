@@ -107,12 +107,23 @@
           Добавить канал или группу
         </label>
         <div class="row compact">
-          <input
-            id="channel-input"
-            v-model="newChannelValue"
-            type="text"
-            placeholder="@username или https://t.me/..."
-          />
+          <div class="input-with-clear">
+            <input
+              id="channel-input"
+              v-model="newChannelValue"
+              type="text"
+              placeholder="@username или https://t.me/..."
+            />
+            <button
+              v-if="newChannelValue"
+              type="button"
+              class="clear-button"
+              aria-label="Очистить поле"
+              @click="newChannelValue = ''"
+            >
+              ×
+            </button>
+          </div>
           <button :disabled="channelLoading" @click="addChannel">
             Добавить
           </button>
@@ -124,12 +135,23 @@
           Фильтр каналов
         </label>
         <div class="row compact">
-          <input
-            id="channel-filter"
-            v-model="channelSearch"
-            type="text"
-            placeholder="Поиск по ID, названию, username"
-          />
+          <div class="input-with-clear">
+            <input
+              id="channel-filter"
+              v-model="channelSearch"
+              type="text"
+              placeholder="Поиск по ID, названию, username"
+            />
+            <button
+              v-if="channelSearch"
+              type="button"
+              class="clear-button"
+              aria-label="Очистить фильтр"
+              @click="channelSearch = ''"
+            >
+              ×
+            </button>
+          </div>
         </div>
         <div class="table-container" @scroll="onChannelsScroll">
           <table class="compact-table">
@@ -271,12 +293,23 @@
           Фильтр пользователей
         </label>
         <div class="row compact">
-          <input
-            id="user-filter"
-            v-model="userSearch"
-            type="text"
-            placeholder="Поиск по ID, имени, username"
-          />
+          <div class="input-with-clear">
+            <input
+              id="user-filter"
+              v-model="userSearch"
+              type="text"
+              placeholder="Поиск по ID, имени, username"
+            />
+            <button
+              v-if="userSearch"
+              type="button"
+              class="clear-button"
+              aria-label="Очистить фильтр"
+              @click="userSearch = ''"
+            >
+              ×
+            </button>
+          </div>
         </div>
         <div class="table-container" @scroll="onUsersScroll">
           <table class="compact-table">
@@ -907,6 +940,37 @@ onMounted(async () => {
 
 .row.compact {
   gap: 6px;
+}
+
+.input-with-clear {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.input-with-clear input {
+  padding-right: 26px;
+}
+
+.clear-button {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.clear-button:hover {
+  color: #1f2933;
 }
 
 .analysis-controls {
