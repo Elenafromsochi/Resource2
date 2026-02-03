@@ -12,15 +12,15 @@ from app.schemas import UserListResponse
 from app.schemas import UserOut
 
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix='/api')
 
 
-@router.get("/health")
+@router.get('/health')
 async def health():
-    return {"status": "ok"}
+    return {'status': 'ok'}
 
 
-@router.post("/channels", response_model=ChannelOut)
+@router.post('/channels', response_model=ChannelOut)
 async def add_channel(payload: ChannelCreate, request: Request):
     mediator = request.app.state.mediator
     try:
@@ -32,13 +32,13 @@ async def add_channel(payload: ChannelCreate, request: Request):
     return saved
 
 
-@router.delete("/channels/{channel_id}")
+@router.delete('/channels/{channel_id}')
 async def delete_channel(channel_id: int, request: Request):
     await request.app.state.storage.channels.delete(channel_id)
-    return {"status": "deleted"}
+    return {'status': 'deleted'}
 
 
-@router.get("/channels", response_model=ChannelListResponse)
+@router.get('/channels', response_model=ChannelListResponse)
 async def list_channels(
     request: Request,
     offset: int = Query(0, ge=0),
@@ -46,21 +46,21 @@ async def list_channels(
 ):
     items = await request.app.state.storage.channels.list(offset, limit)
     next_offset = offset + limit if len(items) == limit else None
-    return {"items": items, "next_offset": next_offset}
+    return {'items': items, 'next_offset': next_offset}
 
 
-@router.get("/channels/all", response_model=list[ChannelOut])
+@router.get('/channels/all', response_model=list[ChannelOut])
 async def list_all_channels(request: Request):
     return await request.app.state.storage.channels.list_all()
 
 
-@router.post("/channels/import-dialogs")
+@router.post('/channels/import-dialogs')
 async def import_dialogs(request: Request):
     saved = await request.app.state.mediator.import_dialogs()
-    return {"imported": len(saved)}
+    return {'imported': len(saved)}
 
 
-@router.post("/users/analyze", response_model=AnalyzeResponse)
+@router.post('/users/analyze', response_model=AnalyzeResponse)
 async def analyze_users(payload: AnalyzeRequest, request: Request):
     result = await request.app.state.mediator.analyze_activity(
         payload.date_from,
@@ -70,7 +70,7 @@ async def analyze_users(payload: AnalyzeRequest, request: Request):
     return result
 
 
-@router.get("/users", response_model=UserListResponse)
+@router.get('/users', response_model=UserListResponse)
 async def list_users(
     request: Request,
     offset: int = Query(0, ge=0),
@@ -78,4 +78,4 @@ async def list_users(
 ):
     items = await request.app.state.storage.users.list(offset, limit)
     next_offset = offset + limit if len(items) == limit else None
-    return {"items": items, "next_offset": next_offset}
+    return {'items': items, 'next_offset': next_offset}

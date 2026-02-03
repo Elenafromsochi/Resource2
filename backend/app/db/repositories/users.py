@@ -27,19 +27,19 @@ class UsersRepository:
                 updated_at = NOW()
             RETURNING *
             """,
-            user["id"],
-            user.get("username"),
-            user.get("first_name"),
-            user.get("last_name"),
-            user.get("bio"),
-            user.get("photo"),
-            user.get("messages_count", 0),
+            user['id'],
+            user.get('username'),
+            user.get('first_name'),
+            user.get('last_name'),
+            user.get('bio'),
+            user.get('photo'),
+            user.get('messages_count', 0),
         )
         return dict(row) if row else None
 
     async def replace_user_channels(self, user_id, channel_counts):
         async with self.pool.acquire() as conn:
-            await conn.execute("DELETE FROM user_channels WHERE user_id = $1", user_id)
+            await conn.execute('DELETE FROM user_channels WHERE user_id = $1', user_id)
             if not channel_counts:
                 return
             values = [
@@ -71,7 +71,7 @@ class UsersRepository:
         if not user_ids:
             return []
         rows = await self.pool.fetch(
-            "SELECT * FROM users WHERE id = ANY($1::bigint[])",
+            'SELECT * FROM users WHERE id = ANY($1::bigint[])',
             user_ids,
         )
         return [dict(row) for row in rows]

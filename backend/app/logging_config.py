@@ -6,18 +6,18 @@ import colorlog
 from app import config
 
 
-def setup_logging():
+def setup_logging() -> None:
     handler = colorlog.StreamHandler(sys.stdout)
     handler.setFormatter(
         colorlog.ColoredFormatter(
-            "%(log_color)s%(levelname)s%(reset)s "
-            "%(asctime)s %(name)s: %(message)s",
+            '%(log_color)s%(levelname)s%(reset)s '
+            '%(asctime)s %(name)s: %(message)s',
             log_colors={
-                "DEBUG": "cyan",
-                "INFO": "green",
-                "WARNING": "yellow",
-                "ERROR": "red",
-                "CRITICAL": "bold_red",
+                'DEBUG': 'cyan',
+                'INFO': 'green',
+                'WARNING': 'yellow',
+                'ERROR': 'red',
+                'CRITICAL': 'bold_red',
             },
         ),
     )
