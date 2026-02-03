@@ -19,11 +19,11 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS user_channels (
-    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS channel_users (
     channel_id BIGINT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     messages_count INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (user_id, channel_id)
+    PRIMARY KEY (channel_id, user_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_activity

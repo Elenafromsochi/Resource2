@@ -39,16 +39,16 @@ class UsersRepository:
 
     async def replace_user_channels(self, user_id, channel_counts):
         async with self.pool.acquire() as conn:
-            await conn.execute('DELETE FROM user_channels WHERE user_id = $1', user_id)
+            await conn.execute('DELETE FROM channel_users WHERE user_id = $1', user_id)
             if not channel_counts:
                 return
             values = [
-                (user_id, channel_id, messages_count)
+                (channel_id, user_id, messages_count)
                 for channel_id, messages_count in channel_counts.items()
             ]
             await conn.executemany(
                 """
-                INSERT INTO user_channels (user_id, channel_id, messages_count)
+                INSERT INTO channel_users (channel_id, user_id, messages_count)
                 VALUES ($1, $2, $3)
                 """,
                 values,
