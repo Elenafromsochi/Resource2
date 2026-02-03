@@ -11,7 +11,7 @@ from app.app import app
 from app.config import APP
 from app.config import LOG_LEVEL
 from app.config import POSTGRES_URL
-from app.db.utils import apply_migrations
+from app.db.utils import migrate
 
 
 handler = colorlog.StreamHandler(sys.stdout)
@@ -32,7 +32,7 @@ logging.basicConfig(level=LOG_LEVEL, handlers=[handler])
 
 
 def run() -> None:
-    asyncio.run(apply_migrations(POSTGRES_URL))
+    asyncio.run(migrate(POSTGRES_URL))
     uvicorn.run(app, **APP)
 
 

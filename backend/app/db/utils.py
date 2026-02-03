@@ -5,7 +5,7 @@ from pathlib import Path
 import asyncpg
 
 
-async def apply_migrations(dsn: str) -> None:
+async def migrate(dsn: str) -> None:
     migrations_path = Path(__file__).resolve().parent / 'migrations'
     migrations = sorted(migrations_path.glob('*.sql'))
     conn = await asyncpg.connect(dsn)
