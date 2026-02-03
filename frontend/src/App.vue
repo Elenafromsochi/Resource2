@@ -14,14 +14,6 @@
               <span class="range-date">{{ analysisRangeLabel }}</span>
             </div>
             <div class="range-slider">
-              <div class="range-ticks" aria-hidden="true">
-                <span
-                  v-for="tick in rangeDayTicks"
-                  :key="`tick-${tick.value}`"
-                  class="range-tick"
-                  :style="{ left: tick.left }"
-                ></span>
-              </div>
               <input
                 class="range-input range-input-start"
                 type="range"
@@ -546,15 +538,6 @@ const analysisRangeLabel = computed(() => {
   return `${from} — ${to}`;
 });
 
-const rangeDayTicks = computed(() => {
-  const maxDays = analysisRangeMaxDays;
-  const safeMax = maxDays > 0 ? maxDays : 1;
-  return Array.from({ length: maxDays + 1 }, (_, value) => ({
-    value,
-    left: `${(value / safeMax) * 100}%`,
-  }));
-});
-
 const rangeFromLabel = computed(() => formatDaysAgo(rangeEndDays.value));
 const rangeToLabel = computed(() => formatDaysAgo(rangeStartDays.value));
 
@@ -1044,23 +1027,6 @@ onMounted(async () => {
   position: relative;
   width: 100%;
   height: 28px;
-}
-
-.range-ticks {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.range-tick {
-  position: absolute;
-  top: 50%;
-  width: 1px;
-  height: 8px;
-  background: #b7c1cd;
-  border-radius: 999px;
-  transform: translate(-50%, -50%);
 }
 
 .range-input {
