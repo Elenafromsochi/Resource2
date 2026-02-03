@@ -74,18 +74,19 @@ class UsersRepository(BaseRepository):
         return dict(row) if row else None
 
     async def replace_user_channels(self, user_id, channel_counts):
+        if not channel_counts:
+            return
+        values = [
+            (channel_id, user_id, messages_count)
+            for channel_id, messages_count in channel_counts.items()
+        ]
         async with self.pool.acquire() as conn:
-            await conn.execute('DELETE FROM channel_users WHERE user_id = $1', user_id)
-            if not channel_counts:
-                return
-            values = [
-                (channel_id, user_id, messages_count)
-                for channel_id, messages_count in channel_counts.items()
-            ]
             await conn.executemany(
                 """
                 INSERT INTO channel_users (channel_id, user_id, messages_count)
                 VALUES ($1, $2, $3)
+                ON CONFLICT (channel_id, user_id)
+                DO UPDATE SET messages_count = EXCLUDED.messages_count
                 """,
                 values,
             )
