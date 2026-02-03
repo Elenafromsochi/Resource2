@@ -22,11 +22,33 @@ class Mediator:
         self.deepseek = deepseek
         self.storage = storage
 
-    async def get_channel_entity(self, value: str) -> Channel | Chat:
-        normalized = self.normalize_identifier(value)
+    async def get_channel_entity(self, value: str | int) -> Channel | Chat:
+        normalized = value if isinstance(value, int) else self.normalize_identifier(value)
         if normalized is None:
             raise ValueError('Empty channel identifier')
-        entity = await self.telegram.client.get_entity(normalized)
+        entity = None
+        try:
+            entity = await self.telegram.client.get_entity(normalized)
+        except Exception:
+            entity = None
+        if (
+            isinstance(normalized, int)
+            and (entity is None or not isinstance(entity, (Channel, Chat)))
+        ):
+            stored = await self.storage.channels.get_by_ids([normalized])
+            channel = stored[0] if stored else None
+            if channel:
+                fallback = channel.get('username') or channel.get('link')
+                if fallback:
+                    fallback_value = (
+                        self.normalize_identifier(fallback)
+                        if isinstance(fallback, str)
+                        else fallback
+                    )
+                    try:
+                        entity = await self.telegram.client.get_entity(fallback_value)
+                    except Exception:
+                        entity = None
         if not isinstance(entity, (Channel, Chat)):
             raise ValueError('Entity is not a channel or group')
         return entity
@@ -142,7 +164,7 @@ class Mediator:
         self,
         channel_id: int,
     ) -> tuple[Channel | Chat, str | None, int | None]:
-        entity = await self.telegram.client.get_entity(channel_id)
+        entity = await self.get_channel_entity(channel_id)
         about = None
         members_count = None
         try:
