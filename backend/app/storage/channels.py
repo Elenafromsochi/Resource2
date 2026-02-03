@@ -5,25 +5,14 @@ class ChannelsRepository(BaseRepository):
     async def upsert(self, channel):
         row = await self.pool.fetchrow(
             """
-            INSERT INTO channels (
-                id,
-                username,
-                title,
-                channel_type,
-                link,
-                about,
-                members_count,
-                updated_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+            INSERT INTO channels (id, username, title, channel_type, link, updated_at)
+            VALUES ($1, $2, $3, $4, $5, NOW())
             ON CONFLICT (id)
             DO UPDATE SET
                 username = EXCLUDED.username,
                 title = EXCLUDED.title,
                 channel_type = EXCLUDED.channel_type,
                 link = EXCLUDED.link,
-                about = EXCLUDED.about,
-                members_count = EXCLUDED.members_count,
                 updated_at = NOW()
             RETURNING *
             """,
@@ -32,8 +21,6 @@ class ChannelsRepository(BaseRepository):
             channel['title'],
             channel['channel_type'],
             channel.get('link'),
-            channel.get('about'),
-            channel.get('members_count'),
         )
         return dict(row) if row else None
 

@@ -4,8 +4,6 @@ CREATE TABLE IF NOT EXISTS channels (
     title TEXT NOT NULL,
     channel_type TEXT NOT NULL,
     link TEXT,
-    about TEXT,
-    members_count INTEGER,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
