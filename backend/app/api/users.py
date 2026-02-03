@@ -23,8 +23,8 @@ async def analyze_users(payload: AnalyzeRequest, request: Request):
 @router.get('', response_model=UserListResponse)
 async def list_users(
     request: Request,
-    offset: int = Query(0, ge=0),
-    limit: int = Query(30, ge=1, le=200),
+    offset: int = Query(0),
+    limit: int = Query(30),
 ):
     items = await request.app.state.storage.users.list(offset, limit)
     next_offset = offset + limit if len(items) == limit else None

@@ -32,8 +32,8 @@ async def delete_channel(channel_id: int, request: Request):
 @router.get('', response_model=ChannelListResponse)
 async def list_channels(
     request: Request,
-    offset: int = Query(0, ge=0),
-    limit: int = Query(30, ge=1, le=200),
+    offset: int = Query(0),
+    limit: int = Query(30),
 ):
     items = await request.app.state.storage.channels.list(offset, limit)
     next_offset = offset + limit if len(items) == limit else None
