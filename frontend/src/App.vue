@@ -46,7 +46,7 @@
           </button>
         </div>
         <div class="table-container analysis-table">
-          <table>
+          <table class="compact-table">
             <thead>
               <tr>
                 <th class="select-cell">
@@ -59,6 +59,7 @@
                     Все
                   </label>
                 </th>
+                <th>Фото</th>
                 <th>Название</th>
                 <th>Username</th>
                 <th>Тип</th>
@@ -73,12 +74,25 @@
                     v-model="selectedChannelIds"
                   />
                 </td>
+                <td class="photo-cell">
+                  <div
+                    class="avatar"
+                    :class="{ placeholder: !getChannelAvatarUrl(channel) }"
+                  >
+                    <img
+                      v-if="getChannelAvatarUrl(channel)"
+                      :src="getChannelAvatarUrl(channel)"
+                      alt=""
+                      loading="lazy"
+                    />
+                  </div>
+                </td>
                 <td>{{ channel.title }}</td>
                 <td>{{ channel.username || "-" }}</td>
                 <td>{{ channel.channel_type }}</td>
               </tr>
               <tr v-if="sortedChannelsForSelect.length === 0">
-                <td colspan="4" class="muted">Нет каналов</td>
+                <td colspan="5" class="muted">Нет каналов</td>
               </tr>
             </tbody>
           </table>
