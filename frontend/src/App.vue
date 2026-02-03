@@ -876,6 +876,7 @@ th {
   padding: 0;
   width: 26px;
   height: 26px;
+  margin-right: 4px;
   background: #fbe9e7;
   color: #c0392b;
   border: 1px solid #f4c6c0;
