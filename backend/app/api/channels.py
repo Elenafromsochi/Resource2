@@ -56,8 +56,9 @@ async def get_channel_details(channel_id: int, request: Request):
         about,
         members_count,
     )
-    saved = await request.app.state.storage.channels.upsert(channel_data)
-    return saved
+    channel_base = request.app.state.mediator.format_channel(entity)
+    await request.app.state.storage.channels.upsert(channel_base)
+    return channel_data
 
 
 @router.post('/import-dialogs')
