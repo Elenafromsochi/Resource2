@@ -18,11 +18,11 @@ from app.services.telegram import Telegram
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     storage = Storage()
-    await storage.init()
     telegram = Telegram()
-    await telegram.init()
     deepseek = DeepSeek()
     mediator = Mediator(telegram, deepseek, storage)
+    await storage.init()
+    await telegram.init()
     app.state.storage = storage
     app.state.telegram = telegram
     app.state.deepseek = deepseek
