@@ -12,7 +12,6 @@
             <div class="range-info">
               <span class="range-label">Период</span>
               <span class="range-date">{{ analysisRangeLabel }}</span>
-              <span class="range-days">{{ analysisRangeDaysLabel }}</span>
             </div>
             <div class="range-slider">
               <div class="range-ticks" aria-hidden="true">
@@ -544,15 +543,6 @@ const analysisRangeLabel = computed(() => {
   const from = dateFormatter.format(getUtcStartDate(rangeEndDays.value));
   const to = dateFormatter.format(getUtcStartDate(rangeStartDays.value));
   return `${from} — ${to}`;
-});
-
-const analysisRangeDaysLabel = computed(() => {
-  const fromLabel = formatDaysAgo(rangeEndDays.value);
-  const toLabel = formatDaysAgo(rangeStartDays.value);
-  if (fromLabel === toLabel) {
-    return fromLabel === "сегодня" ? "только сегодня" : fromLabel;
-  }
-  return `от ${fromLabel} до ${toLabel}`;
 });
 
 const rangeTickStep = computed(() => {
