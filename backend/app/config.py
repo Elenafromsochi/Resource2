@@ -5,6 +5,7 @@ APP_NAME = 'Telegram Activity Monitor'
 APP_HOST = '0.0.0.0'
 APP_PORT = 8000
 LOG_LEVEL = 'INFO'
+APP = {'host': APP_HOST, 'port': APP_PORT}
 
 # Database
 POSTGRES_URL = os.environ['POSTGRES_URL']
@@ -22,3 +23,4 @@ DEEPSEEK_BASE_URL = 'https://api.deepseek.com'
 
 # API
 CORS_ORIGINS = ['*']
+API_ROOT_PATH = '/api'
