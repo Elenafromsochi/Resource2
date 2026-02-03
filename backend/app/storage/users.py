@@ -37,6 +37,40 @@ class UsersRepository(BaseRepository):
         )
         return dict(row) if row else None
 
+    async def upsert_profile(self, user):
+        row = await self.pool.fetchrow(
+            """
+            INSERT INTO users (
+                id,
+                username,
+                first_name,
+                last_name,
+                bio,
+                photo,
+                messages_count,
+                updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+            ON CONFLICT (id)
+            DO UPDATE SET
+                username = EXCLUDED.username,
+                first_name = EXCLUDED.first_name,
+                last_name = EXCLUDED.last_name,
+                bio = EXCLUDED.bio,
+                photo = EXCLUDED.photo,
+                updated_at = NOW()
+            RETURNING *
+            """,
+            user['id'],
+            user.get('username'),
+            user.get('first_name'),
+            user.get('last_name'),
+            user.get('bio'),
+            user.get('photo'),
+            user.get('messages_count', 0),
+        )
+        return dict(row) if row else None
+
     async def replace_user_channels(self, user_id, channel_counts):
         async with self.pool.acquire() as conn:
             await conn.execute('DELETE FROM channel_users WHERE user_id = $1', user_id)

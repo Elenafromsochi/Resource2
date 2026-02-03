@@ -36,5 +36,15 @@ async def list_users(
 async def get_user_details(user_id: int, request: Request):
     entity, about = await request.app.state.mediator.get_user_details(user_id)
     user_data = request.app.state.mediator.format_user_details(entity, about)
+    await request.app.state.storage.users.upsert_profile(
+        {
+            'id': user_data['id'],
+            'username': user_data.get('username'),
+            'first_name': user_data.get('first_name'),
+            'last_name': user_data.get('last_name'),
+            'bio': user_data.get('bio'),
+            'photo': user_data.get('photo'),
+        }
+    )
     groups = await request.app.state.storage.users.list_user_groups(user_id)
     return {**user_data, 'groups': groups}
