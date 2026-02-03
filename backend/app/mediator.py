@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from telethon.tl.functions.channels import GetFullChannelRequest
+from telethon.tl.functions.contacts import SearchRequest
 from telethon.tl.functions.messages import GetFullChatRequest
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.tl.types import Channel
@@ -53,11 +54,46 @@ class Mediator:
             raise ValueError('Entity is not a channel or group')
         return entity
 
-    async def get_user_entity(self, value: str) -> User:
-        normalized = self.normalize_identifier(value)
+    async def get_user_entity(self, value: str | int) -> User:
+        normalized = value if isinstance(value, int) else self.normalize_identifier(value)
         if normalized is None:
             raise ValueError('Empty user identifier')
-        entity = await self.telegram.client.get_entity(normalized)
+        entity = None
+        try:
+            entity = await self.telegram.client.get_entity(normalized)
+        except Exception:
+            entity = None
+        if isinstance(entity, User):
+            return entity
+        if isinstance(normalized, int):
+            stored = await self.storage.users.get_by_ids([normalized])
+            user_data = stored[0] if stored else None
+            if user_data:
+                username = user_data.get('username')
+                if username:
+                    fallback = self.normalize_identifier(username)
+                    try:
+                        entity = await self.telegram.client.get_entity(fallback)
+                    except Exception:
+                        entity = None
+                if not isinstance(entity, User):
+                    name_parts = [
+                        user_data.get('first_name') or '',
+                        user_data.get('last_name') or '',
+                    ]
+                    name_query = ' '.join(part for part in name_parts if part).strip()
+                    if name_query:
+                        try:
+                            results = await self.telegram.client(
+                                SearchRequest(q=name_query, limit=10)
+                            )
+                        except Exception:
+                            results = None
+                        if results:
+                            for result in results.users:
+                                if isinstance(result, User) and result.id == normalized:
+                                    entity = result
+                                    break
         if not isinstance(entity, User):
             raise ValueError('Entity is not a user')
         return entity
@@ -151,10 +187,10 @@ class Mediator:
         }
 
     async def get_user_details(self, user_id: int) -> tuple[User, str | None]:
-        user = await self.telegram.client.get_entity(user_id)
+        user = await self.get_user_entity(user_id)
         about = None
         try:
-            full = await self.telegram.client(GetFullUserRequest(user_id))
+            full = await self.telegram.client(GetFullUserRequest(user))
             about = full.full_user.about
         except Exception:
             about = None
