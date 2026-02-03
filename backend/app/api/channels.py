@@ -16,7 +16,7 @@ router = APIRouter(prefix='/channels')
 async def add_channel(payload: ChannelCreate, request: Request):
     mediator = request.app.state.mediator
     try:
-        entity = await mediator.get_channel_entity(payload.value)
+        entity = await mediator.get_channel_entity_by_identifier(payload.value)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     channel = mediator.format_channel(entity)
