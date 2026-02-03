@@ -493,8 +493,18 @@ const formatUserName = (user) => {
   return fullName ? fullName : "-";
 };
 
+const getUserTotalMessages = (user) => {
+  if (user?.channel_messages && user.channel_messages.length > 0) {
+    return user.channel_messages.reduce(
+      (sum, entry) => sum + (entry?.messages_count ?? 0),
+      0,
+    );
+  }
+  return user?.messages_count ?? 0;
+};
+
 const formatUserChannelMessages = (user) => {
-  const total = user?.messages_count ?? 0;
+  const total = getUserTotalMessages(user);
   if (!user?.channel_messages || user.channel_messages.length === 0) {
     return String(total);
   }
@@ -502,7 +512,7 @@ const formatUserChannelMessages = (user) => {
     (a, b) => a.channel_id - b.channel_id,
   );
   const perChannel = sorted
-    .map((entry) => `${entry.channel_id}: ${entry.messages_count}`)
+    .map((entry) => String(entry.messages_count ?? 0))
     .join(", ");
   return `${total} (${perChannel})`;
 };
@@ -646,7 +656,7 @@ const userSorters = {
   photo: (user) => getUserAvatarKey(user),
   name: (user) => getUserNameValue(user),
   username: (user) => user.username || "",
-  messages_count: (user) => user.messages_count ?? 0,
+  messages_count: (user) => getUserTotalMessages(user),
 };
 
 const sortedChannels = computed(() =>
