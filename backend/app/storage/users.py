@@ -91,7 +91,34 @@ class UsersRepository(BaseRepository):
                 values,
             )
 
-    async def list(self, offset, limit):
+    async def list(self, offset, limit, search: str | None = None):
+        if search:
+            search_value = search.strip()
+            if search_value:
+                normalized = search_value.lstrip('@')
+                if not normalized:
+                    normalized = search_value
+                id_pattern = f"%{search_value}%"
+                text_pattern = f"%{normalized}%"
+                rows = await self.pool.fetch(
+                    """
+                    SELECT *
+                    FROM users
+                    WHERE CAST(id AS TEXT) ILIKE $1
+                       OR COALESCE(username, '') ILIKE $2
+                       OR COALESCE(first_name, '') ILIKE $2
+                       OR COALESCE(last_name, '') ILIKE $2
+                       OR CONCAT_WS(' ', first_name, last_name) ILIKE $2
+                       OR CONCAT_WS(' ', last_name, first_name) ILIKE $2
+                    ORDER BY messages_count DESC, updated_at DESC, id DESC
+                    OFFSET $3 LIMIT $4
+                    """,
+                    id_pattern,
+                    text_pattern,
+                    offset,
+                    limit,
+                )
+                return [dict(row) for row in rows]
         rows = await self.pool.fetch(
             """
             SELECT *

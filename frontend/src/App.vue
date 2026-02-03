@@ -88,6 +88,17 @@
             Импортировать из диалогов
           </button>
         </div>
+        <label class="field-label" for="channel-filter">
+          Фильтр каналов
+        </label>
+        <div class="row compact">
+          <input
+            id="channel-filter"
+            v-model="channelSearch"
+            type="text"
+            placeholder="Поиск по ID, названию, username"
+          />
+        </div>
         <div class="table-container" @scroll="onChannelsScroll">
           <table class="compact-table">
             <thead>
@@ -224,6 +235,17 @@
 
       <section class="block">
         <h2>Пользователи</h2>
+        <label class="field-label" for="user-filter">
+          Фильтр пользователей
+        </label>
+        <div class="row compact">
+          <input
+            id="user-filter"
+            v-model="userSearch"
+            type="text"
+            placeholder="Поиск по ID, имени, username"
+          />
+        </div>
         <div class="table-container" @scroll="onUsersScroll">
           <table class="compact-table">
             <thead>
@@ -338,7 +360,7 @@
 
 <script setup>
 import axios from "axios";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 const api = axios.create({ baseURL: API_BASE });
@@ -348,19 +370,23 @@ const channels = ref([]);
 const channelOffset = ref(0);
 const channelHasMore = ref(true);
 const channelLoading = ref(false);
+const channelListRequestId = ref(0);
 const selectedChannelDetailsId = ref(null);
 const channelDetails = ref(null);
 const channelDetailsLoading = ref(false);
 const channelDetailsRequestId = ref(0);
+const channelSearch = ref("");
 
 const users = ref([]);
 const userOffset = ref(0);
 const userHasMore = ref(true);
 const userLoading = ref(false);
+const userListRequestId = ref(0);
 const selectedUserId = ref(null);
 const userDetails = ref(null);
 const userDetailsLoading = ref(false);
 const userDetailsRequestId = ref(0);
+const userSearch = ref("");
 
 const newChannelValue = ref("");
 const channelsForSelect = ref([]);
@@ -500,9 +526,11 @@ const sortedChannelsForSelect = computed(() => {
 });
 
 const fetchChannels = async (reset = false) => {
-  if (channelLoading.value || (!channelHasMore.value && !reset)) {
+  if (!reset && (channelLoading.value || !channelHasMore.value)) {
     return;
   }
+  const requestId = channelListRequestId.value + 1;
+  channelListRequestId.value = requestId;
   channelLoading.value = true;
   if (reset) {
     channels.value = [];
@@ -511,22 +539,35 @@ const fetchChannels = async (reset = false) => {
     selectedChannelDetailsId.value = null;
     channelDetails.value = null;
   }
-  const { data } = await api.get("/channels", {
-    params: { offset: channelOffset.value, limit: 30 },
-  });
-  channels.value.push(...data.items);
-  if (data.next_offset === null) {
-    channelHasMore.value = false;
-  } else {
-    channelOffset.value = data.next_offset;
+  const searchValue = channelSearch.value.trim();
+  const params = { offset: channelOffset.value, limit: 30 };
+  if (searchValue) {
+    params.search = searchValue;
   }
-  channelLoading.value = false;
+  try {
+    const { data } = await api.get("/channels", { params });
+    if (channelListRequestId.value !== requestId) {
+      return;
+    }
+    channels.value.push(...data.items);
+    if (data.next_offset === null) {
+      channelHasMore.value = false;
+    } else {
+      channelOffset.value = data.next_offset;
+    }
+  } finally {
+    if (channelListRequestId.value === requestId) {
+      channelLoading.value = false;
+    }
+  }
 };
 
 const fetchUsers = async (reset = false) => {
-  if (userLoading.value || (!userHasMore.value && !reset)) {
+  if (!reset && (userLoading.value || !userHasMore.value)) {
     return;
   }
+  const requestId = userListRequestId.value + 1;
+  userListRequestId.value = requestId;
   userLoading.value = true;
   if (reset) {
     users.value = [];
@@ -535,16 +576,27 @@ const fetchUsers = async (reset = false) => {
     selectedUserId.value = null;
     userDetails.value = null;
   }
-  const { data } = await api.get("/users", {
-    params: { offset: userOffset.value, limit: 30 },
-  });
-  users.value.push(...data.items);
-  if (data.next_offset === null) {
-    userHasMore.value = false;
-  } else {
-    userOffset.value = data.next_offset;
+  const searchValue = userSearch.value.trim();
+  const params = { offset: userOffset.value, limit: 30 };
+  if (searchValue) {
+    params.search = searchValue;
   }
-  userLoading.value = false;
+  try {
+    const { data } = await api.get("/users", { params });
+    if (userListRequestId.value !== requestId) {
+      return;
+    }
+    users.value.push(...data.items);
+    if (data.next_offset === null) {
+      userHasMore.value = false;
+    } else {
+      userOffset.value = data.next_offset;
+    }
+  } finally {
+    if (userListRequestId.value === requestId) {
+      userLoading.value = false;
+    }
+  }
 };
 
 const openUserDetails = async (userId) => {
@@ -627,6 +679,28 @@ const getUsersList = async () => {
     userListLoading.value = false;
   }
 };
+
+const SEARCH_DEBOUNCE_MS = 300;
+let channelSearchTimeout;
+let userSearchTimeout;
+
+watch(channelSearch, () => {
+  if (channelSearchTimeout) {
+    clearTimeout(channelSearchTimeout);
+  }
+  channelSearchTimeout = setTimeout(() => {
+    fetchChannels(true);
+  }, SEARCH_DEBOUNCE_MS);
+});
+
+watch(userSearch, () => {
+  if (userSearchTimeout) {
+    clearTimeout(userSearchTimeout);
+  }
+  userSearchTimeout = setTimeout(() => {
+    fetchUsers(true);
+  }, SEARCH_DEBOUNCE_MS);
+});
 
 const toggleAllChannels = (event) => {
   if (event.target.checked) {
