@@ -1023,14 +1023,17 @@ onMounted(async () => {
 
 .analysis-controls {
   align-items: flex-start;
+  justify-content: space-between;
 }
 
 .analysis-controls button {
   align-self: flex-start;
+  margin-left: auto;
 }
 
 .range-control {
-  flex: 1 1 260px;
+  flex: 0 1 360px;
+  max-width: 360px;
   min-width: 220px;
   display: flex;
   flex-direction: column;
