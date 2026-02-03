@@ -146,3 +146,14 @@ class Mediator:
             'photo': str(entity.photo) if entity.photo else None,
             'messages_count': 0,
         }
+
+    def format_user_details(self, entity: User, about: str | None) -> dict[str, Any]:
+        return {
+            'id': entity.id,
+            'username': entity.username,
+            'first_name': entity.first_name,
+            'last_name': entity.last_name,
+            'bio': about,
+            'photo': str(entity.photo) if entity.photo else None,
+            'phone': getattr(entity, 'phone', None),
+        }

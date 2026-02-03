@@ -45,3 +45,22 @@ class UserOut(BaseModel):
 class UserListResponse(BaseModel):
     items: list[UserOut]
     next_offset: int | None
+
+
+class UserGroupOut(BaseModel):
+    id: int
+    username: str | None
+    title: str
+    channel_type: str
+    link: str | None
+
+
+class UserDetailsResponse(BaseModel):
+    id: int
+    username: str | None
+    first_name: str | None
+    last_name: str | None
+    bio: str | None
+    photo: str | None
+    phone: str | None
+    groups: list[UserGroupOut]
