@@ -590,7 +590,10 @@ const updateRangeStart = (event) => {
   if (Number.isNaN(value)) {
     return;
   }
-  rangeStartDays.value = Math.min(value, rangeEndDays.value);
+  if (value > rangeEndDays.value) {
+    rangeEndDays.value = value;
+  }
+  rangeStartDays.value = value;
 };
 
 const updateRangeEnd = (event) => {
@@ -598,7 +601,10 @@ const updateRangeEnd = (event) => {
   if (Number.isNaN(value)) {
     return;
   }
-  rangeEndDays.value = Math.max(value, rangeStartDays.value);
+  if (value < rangeStartDays.value) {
+    rangeStartDays.value = value;
+  }
+  rangeEndDays.value = value;
 };
 
 const compareValues = (valueA, valueB) => {
