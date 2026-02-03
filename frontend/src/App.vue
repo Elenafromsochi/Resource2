@@ -336,6 +336,7 @@ const channelLoading = ref(false);
 const selectedChannelDetailsId = ref(null);
 const channelDetails = ref(null);
 const channelDetailsLoading = ref(false);
+const channelDetailsRequestId = ref(0);
 
 const users = ref([]);
 const userOffset = ref(0);
@@ -344,6 +345,7 @@ const userLoading = ref(false);
 const selectedUserId = ref(null);
 const userDetails = ref(null);
 const userDetailsLoading = ref(false);
+const userDetailsRequestId = ref(0);
 
 const newChannelValue = ref("");
 const channelsForSelect = ref([]);
@@ -530,20 +532,28 @@ const fetchUsers = async (reset = false) => {
 };
 
 const openUserDetails = async (userId) => {
-  if (userDetailsLoading.value) {
+  if (selectedUserId.value === userId) {
+    selectedUserId.value = null;
+    userDetails.value = null;
+    userDetailsLoading.value = false;
+    userDetailsRequestId.value += 1;
     return;
   }
-  if (selectedUserId.value === userId && userDetails.value) {
-    return;
-  }
+  const requestId = userDetailsRequestId.value + 1;
+  userDetailsRequestId.value = requestId;
   selectedUserId.value = userId;
   userDetails.value = null;
   userDetailsLoading.value = true;
   try {
     const { data } = await api.get(`/users/${userId}`);
+    if (userDetailsRequestId.value !== requestId) {
+      return;
+    }
     userDetails.value = data;
   } finally {
-    userDetailsLoading.value = false;
+    if (userDetailsRequestId.value === requestId) {
+      userDetailsLoading.value = false;
+    }
   }
 };
 
@@ -615,20 +625,28 @@ const onChannelsScroll = (event) => {
 };
 
 const openChannelDetails = async (channelId) => {
-  if (channelDetailsLoading.value) {
+  if (selectedChannelDetailsId.value === channelId) {
+    selectedChannelDetailsId.value = null;
+    channelDetails.value = null;
+    channelDetailsLoading.value = false;
+    channelDetailsRequestId.value += 1;
     return;
   }
-  if (selectedChannelDetailsId.value === channelId && channelDetails.value) {
-    return;
-  }
+  const requestId = channelDetailsRequestId.value + 1;
+  channelDetailsRequestId.value = requestId;
   selectedChannelDetailsId.value = channelId;
   channelDetails.value = null;
   channelDetailsLoading.value = true;
   try {
     const { data } = await api.get(`/channels/${channelId}`);
+    if (channelDetailsRequestId.value !== requestId) {
+      return;
+    }
     channelDetails.value = data;
   } finally {
-    channelDetailsLoading.value = false;
+    if (channelDetailsRequestId.value === requestId) {
+      channelDetailsLoading.value = false;
+    }
   }
 };
 
