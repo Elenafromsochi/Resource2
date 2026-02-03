@@ -7,9 +7,41 @@
     <main class="stack">
       <section class="block">
         <h2>Анализ активности</h2>
-        <div class="row">
-          <input v-model="userListFrom" type="date" />
-          <input v-model="userListTo" type="date" />
+        <div class="row analysis-controls">
+          <div class="range-control">
+            <div class="range-info">
+              <span class="range-label">Период</span>
+              <span class="range-date">{{ analysisRangeLabel }}</span>
+              <span class="range-days">{{ analysisRangeDaysLabel }}</span>
+            </div>
+            <div class="range-slider">
+              <input
+                class="range-input range-input-start"
+                type="range"
+                min="0"
+                :max="analysisRangeMaxDays"
+                step="1"
+                :value="rangeStartDays"
+                aria-label="До (дней назад)"
+                @input="updateRangeStart"
+              />
+              <input
+                class="range-input range-input-end"
+                type="range"
+                min="0"
+                :max="analysisRangeMaxDays"
+                step="1"
+                :value="rangeEndDays"
+                aria-label="От (дней назад)"
+                @input="updateRangeEnd"
+              />
+            </div>
+            <div class="range-values">
+              <span>От: {{ rangeFromLabel }}</span>
+              <span>До: {{ rangeToLabel }}</span>
+              <span class="range-scale">0 — {{ analysisRangeMaxDays }} дн.</span>
+            </div>
+          </div>
           <button :disabled="userListLoading" @click="getUsersList">
             Получить список пользователей
           </button>
@@ -362,6 +394,8 @@
 import axios from "axios";
 import { computed, onMounted, ref, watch } from "vue";
 
+import { ANALYSIS_RANGE_MAX_DAYS } from "./config";
+
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 const api = axios.create({ baseURL: API_BASE });
 const TELEGRAM_AVATAR_BASE = "https://t.me/i/userpic/320/";
@@ -392,8 +426,9 @@ const newChannelValue = ref("");
 const channelsForSelect = ref([]);
 const selectedChannelIds = ref([]);
 
-const userListFrom = ref("");
-const userListTo = ref("");
+const analysisRangeMaxDays = ANALYSIS_RANGE_MAX_DAYS;
+const rangeStartDays = ref(0);
+const rangeEndDays = ref(analysisRangeMaxDays);
 const userListLoading = ref(false);
 const analysisResult = ref(null);
 
@@ -408,6 +443,12 @@ const selectAllChannels = computed(() => {
 });
 
 const collator = new Intl.Collator("ru", { numeric: true, sensitivity: "base" });
+const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: "UTC",
+});
 
 const getUserNameValue = (user) => {
   const parts = [user.first_name, user.last_name].filter(Boolean);
@@ -418,6 +459,40 @@ const formatUserName = (user) => {
   const fullName = getUserNameValue(user);
   return fullName ? fullName : "-";
 };
+
+const formatDaysAgo = (days) =>
+  days === 0 ? "сегодня" : `${days} дн. назад`;
+
+const getUtcStartDate = (daysAgo) => {
+  const now = new Date();
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysAgo),
+  );
+};
+
+const getUtcEndDate = (daysAgo) => {
+  const date = getUtcStartDate(daysAgo);
+  date.setUTCHours(23, 59, 59, 999);
+  return date;
+};
+
+const analysisRangeLabel = computed(() => {
+  const from = dateFormatter.format(getUtcStartDate(rangeEndDays.value));
+  const to = dateFormatter.format(getUtcStartDate(rangeStartDays.value));
+  return `${from} — ${to}`;
+});
+
+const analysisRangeDaysLabel = computed(() => {
+  const fromLabel = formatDaysAgo(rangeEndDays.value);
+  const toLabel = formatDaysAgo(rangeStartDays.value);
+  if (fromLabel === toLabel) {
+    return fromLabel === "сегодня" ? "только сегодня" : fromLabel;
+  }
+  return `от ${fromLabel} до ${toLabel}`;
+});
+
+const rangeFromLabel = computed(() => formatDaysAgo(rangeEndDays.value));
+const rangeToLabel = computed(() => formatDaysAgo(rangeStartDays.value));
 
 const isHttpUrl = (value) =>
   typeof value === "string" && /^https?:\/\//i.test(value);
@@ -452,6 +527,22 @@ const getChannelAvatarUrl = (channel) => {
 };
 
 const getUserAvatarUrl = (user) => buildAvatarUrl(user.username, user.photo);
+
+const updateRangeStart = (event) => {
+  const value = Number(event.target.value);
+  if (Number.isNaN(value)) {
+    return;
+  }
+  rangeStartDays.value = Math.min(value, rangeEndDays.value);
+};
+
+const updateRangeEnd = (event) => {
+  const value = Number(event.target.value);
+  if (Number.isNaN(value)) {
+    return;
+  }
+  rangeEndDays.value = Math.max(value, rangeStartDays.value);
+};
 
 const compareValues = (valueA, valueB) => {
   if (valueA === valueB) {
@@ -658,13 +749,10 @@ const importDialogs = async () => {
 };
 
 const getUsersList = async () => {
-  if (!userListFrom.value || !userListTo.value) {
-    return;
-  }
   userListLoading.value = true;
   analysisResult.value = null;
-  const dateFrom = new Date(`${userListFrom.value}T00:00:00Z`).toISOString();
-  const dateTo = new Date(`${userListTo.value}T23:59:59Z`).toISOString();
+  const dateFrom = getUtcStartDate(rangeEndDays.value).toISOString();
+  const dateTo = getUtcEndDate(rangeStartDays.value).toISOString();
   const payload = {
     date_from: dateFrom,
     date_to: dateTo,
@@ -805,6 +893,115 @@ onMounted(async () => {
 
 .row.compact {
   gap: 6px;
+}
+
+.analysis-controls {
+  align-items: flex-start;
+}
+
+.analysis-controls button {
+  align-self: flex-start;
+}
+
+.range-control {
+  flex: 1 1 260px;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.range-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.range-label {
+  font-weight: 600;
+}
+
+.range-date {
+  color: #1f2933;
+}
+
+.range-days {
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.range-slider {
+  position: relative;
+  width: 100%;
+  height: 28px;
+}
+
+.range-input {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8px;
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.range-input-start {
+  z-index: 2;
+}
+
+.range-input-end {
+  z-index: 3;
+}
+
+.range-input::-webkit-slider-runnable-track {
+  height: 4px;
+  background: #d9e2ec;
+  border-radius: 999px;
+}
+
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #2f80ed;
+  border: 1px solid #1b4f9a;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.range-input::-moz-range-track {
+  height: 4px;
+  background: #d9e2ec;
+  border-radius: 999px;
+}
+
+.range-input::-moz-range-thumb {
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #2f80ed;
+  border: 1px solid #1b4f9a;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.range-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.range-scale {
+  margin-left: auto;
 }
 
 input[type="text"],
