@@ -1,5 +1,4 @@
 from fastapi import APIRouter
-from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
 
@@ -15,10 +14,7 @@ router = APIRouter(prefix='/channels')
 @router.post('', response_model=ChannelOut)
 async def add_channel(payload: ChannelCreate, request: Request):
     mediator = request.app.state.mediator
-    try:
-        entity = await mediator.get_channel_entity_by_identifier(payload.value)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    entity = await mediator.get_channel_entity_by_identifier(payload.value)
     channel = mediator.format_channel(entity)
     saved = await request.app.state.storage.channels.upsert(channel)
     return saved

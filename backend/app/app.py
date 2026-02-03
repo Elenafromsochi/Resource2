@@ -10,6 +10,7 @@ from .config import API_ROOT_PATH
 from .config import APP_TITLE
 from .config import CORS_ORIGINS
 from .deepseek import DeepSeek
+from .exception_handlers import register_exception_handlers
 from .mediator import Mediator
 from .storage import Storage
 from .telegram import Telegram
@@ -40,6 +41,7 @@ app = FastAPI(
     openapi_url='/openapi.json',
     lifespan=lifespan,
 )
+register_exception_handlers(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
