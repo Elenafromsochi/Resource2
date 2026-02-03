@@ -1,25 +1,20 @@
-from __future__ import annotations
-
-from pathlib import Path
+import logging
 
 import asyncpg
-import logging
+
+from .config import MIGRATIONS_DIR
 
 
 logger = logging.getLogger('migrations')
 
 
 async def migrate(dsn: str) -> None:
-    migrations_path = Path(__file__).resolve().parent / 'migrations'
-    migrations = sorted(migrations_path.glob('*.sql'))
+    migrations = sorted(MIGRATIONS_DIR.glob('*.sql'))
     conn = await asyncpg.connect(dsn)
     try:
         await conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS migrations (
-                name TEXT PRIMARY KEY,
-                applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
+            CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY)
             """,
         )
         rows = await conn.fetch('SELECT name FROM migrations')

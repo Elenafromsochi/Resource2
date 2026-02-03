@@ -1,40 +1,28 @@
-from __future__ import annotations
-
 import asyncio
 import logging
-import sys
 
-import colorlog
 import uvicorn
+from colorlog import ColoredFormatter
 
-from app.app import app
-from app.config import APP
-from app.config import LOG_LEVEL
-from app.config import POSTGRES_URL
-from app.db.utils import migrate
-
-
-handler = colorlog.StreamHandler(sys.stdout)
-handler.setFormatter(
-    colorlog.ColoredFormatter(
-        '%(log_color)s%(levelname)s%(reset)s '
-        '%(asctime)s %(name)s: %(message)s',
-        log_colors={
-            'DEBUG': 'cyan',
-            'INFO': 'green',
-            'WARNING': 'yellow',
-            'ERROR': 'red',
-            'CRITICAL': 'bold_red',
-        },
-    ),
-)
-logging.basicConfig(level=LOG_LEVEL, handlers=[handler])
+from .app import app
+from .config import POSTGRES_URL
+from .utils import migrate
 
 
-def run() -> None:
-    asyncio.run(migrate(POSTGRES_URL))
-    uvicorn.run(app, **APP)
+handler = logging.StreamHandler()
+handler.setFormatter(ColoredFormatter(
+    '%(log_color)s%(asctime)s.%(msecs)03d [%(levelname).1s] (%(name)s.%(funcName)s:%(lineno)d): %(message)s',
+    log_colors={
+        'DEBUG': 'light_blue',
+        'INFO': 'green',
+        'WARNING': 'yellow',
+        'ERROR': 'red',
+        'CRITICAL': 'bold_red',
+    },
+    datefmt='%Y-%m-%d %H:%M:%S',
+))
+logging.basicConfig(level=logging.DEBUG, handlers=[handler])
+logging.getLogger('telethon').setLevel(logging.INFO)
 
-
-if __name__ == '__main__':
-    run()
+asyncio.run(migrate(POSTGRES_URL))
+uvicorn.run(app, host='0.0.0.0', port=8000)

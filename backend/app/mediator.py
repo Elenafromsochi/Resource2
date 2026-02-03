@@ -9,9 +9,9 @@ from telethon.tl.types import Channel
 from telethon.tl.types import Chat
 from telethon.tl.types import User
 
-from app.db.storage import Storage
-from app.services.deepseek import DeepSeek
-from app.services.telegram import Telegram
+from .deepseek import DeepSeek
+from .storage import Storage
+from .telegram import Telegram
 
 
 class Mediator:
@@ -116,7 +116,7 @@ class Mediator:
         elif isinstance(entity, Channel) and entity.megagroup:
             channel_type = 'group'
         username = getattr(entity, 'username', None)
-        link = f'https://t.me/{username}' if username else None
+        link = f'https: //t.me/{username}' if username else None
         title = getattr(entity, 'title', None) or 'Untitled'
         return {
             'id': entity.id,

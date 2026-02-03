@@ -1,15 +1,15 @@
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 
-from app.config import TELEGRAM_API_HASH
-from app.config import TELEGRAM_API_ID
-from app.config import TELETHON_SESSION
+from .config import TELEGRAM_API_HASH
+from .config import TELEGRAM_API_ID
+from .config import TELETHON_STRING_SESSION
 
 
 class Telegram:
     def __init__(self) -> None:
         self.client: TelegramClient = TelegramClient(
-            StringSession(TELETHON_SESSION),
+            StringSession(TELETHON_STRING_SESSION),
             TELEGRAM_API_ID,
             TELEGRAM_API_HASH,
         )

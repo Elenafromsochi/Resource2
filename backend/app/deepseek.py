@@ -1,7 +1,7 @@
 from openai import AsyncOpenAI
 
-from app.config import DEEPSEEK_API_KEY
-from app.config import DEEPSEEK_BASE_URL
+from .config import DEEPSEEK_API_KEY
+from .config import DEEPSEEK_BASE_URL
 
 
 class DeepSeek:
