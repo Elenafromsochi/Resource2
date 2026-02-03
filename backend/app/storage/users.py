@@ -4,6 +4,32 @@ from .base import BaseRepository
 
 
 class UsersRepository(BaseRepository):
+    async def attach_channel_messages(self, rows):
+        items = [dict(row) for row in rows]
+        if not items:
+            return items
+        user_ids = [item['id'] for item in items]
+        channel_rows = await self.pool.fetch(
+            """
+            SELECT user_id, channel_id, messages_count
+            FROM channel_users
+            WHERE user_id = ANY($1::bigint[])
+            ORDER BY channel_id ASC
+            """,
+            user_ids,
+        )
+        messages_by_user: dict[int, list[dict[str, int]]] = {}
+        for row in channel_rows:
+            messages_by_user.setdefault(row['user_id'], []).append(
+                {
+                    'channel_id': row['channel_id'],
+                    'messages_count': row['messages_count'],
+                }
+            )
+        for item in items:
+            item['channel_messages'] = messages_by_user.get(item['id'], [])
+        return items
+
     async def upsert(self, user):
         row = await self.pool.fetchrow(
             """
@@ -118,7 +144,7 @@ class UsersRepository(BaseRepository):
                     offset,
                     limit,
                 )
-                return [dict(row) for row in rows]
+                return await self.attach_channel_messages(rows)
         rows = await self.pool.fetch(
             """
             SELECT *
@@ -129,7 +155,7 @@ class UsersRepository(BaseRepository):
             offset,
             limit,
         )
-        return [dict(row) for row in rows]
+        return await self.attach_channel_messages(rows)
 
     async def get(self, user_id: int) -> dict[str, Any] | None:
         row = await self.pool.fetchrow(
@@ -160,7 +186,7 @@ class UsersRepository(BaseRepository):
             JOIN channels c ON c.id = cu.channel_id
             WHERE cu.user_id = $1
               AND c.channel_type = 'group'
-            ORDER BY c.title ASC, c.id ASC
+            ORDER BY c.id ASC
             """,
             user_id,
         )

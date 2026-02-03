@@ -43,6 +43,11 @@ class AnalyzeResponse(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
+class UserChannelMessagesOut(BaseModel):
+    channel_id: int
+    messages_count: int
+
+
 class UserOut(BaseModel):
     id: int
     username: str | None
@@ -51,6 +56,7 @@ class UserOut(BaseModel):
     bio: str | None
     photo: str | None
     messages_count: int
+    channel_messages: list[UserChannelMessagesOut] = Field(default_factory=list)
     updated_at: datetime | None = None
 
 

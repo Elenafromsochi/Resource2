@@ -301,7 +301,7 @@
                   </span>
                 </th>
                 <th class="sortable" @click="setUserSort('messages_count')">
-                  Сообщений
+                  Сообщения по каналам
                   <span
                     v-if="userSort.key === 'messages_count'"
                     class="sort-indicator"
@@ -331,7 +331,7 @@
                 </td>
                 <td>{{ formatUserName(user) }}</td>
                 <td>{{ user.username || "-" }}</td>
-                <td>{{ user.messages_count }}</td>
+                <td>{{ formatUserChannelMessages(user) }}</td>
               </tr>
               <tr v-if="userLoading">
                 <td colspan="4" class="muted">Загрузка...</td>
@@ -458,6 +458,18 @@ const getUserNameValue = (user) => {
 const formatUserName = (user) => {
   const fullName = getUserNameValue(user);
   return fullName ? fullName : "-";
+};
+
+const formatUserChannelMessages = (user) => {
+  if (!user?.channel_messages || user.channel_messages.length === 0) {
+    return "-";
+  }
+  const sorted = [...user.channel_messages].sort(
+    (a, b) => a.channel_id - b.channel_id,
+  );
+  return sorted
+    .map((entry) => `${entry.channel_id}: ${entry.messages_count}`)
+    .join(", ");
 };
 
 const formatDaysAgo = (days) =>
