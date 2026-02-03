@@ -901,6 +901,8 @@ onMounted(async () => {
   padding-left: 20%;
   padding-right: 20%;
   color: #1f2933;
+  background: #f6f8fb;
+  min-height: 100vh;
 }
 
 .header {
@@ -914,12 +916,14 @@ onMounted(async () => {
 }
 
 .block {
-  border: 1px solid #e4e7eb;
+  border: 1px solid #e6ecf5;
   border-radius: 8px;
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(31, 41, 51, 0.06);
 }
 
 .block h2 {
@@ -1109,8 +1113,9 @@ button:disabled {
 .table-container {
   max-height: 380px;
   overflow-y: auto;
-  border: 1px solid #e4e7eb;
+  border: 1px solid #e6ecf5;
   border-radius: 6px;
+  background: #ffffff;
 }
 
 .analysis-table {
@@ -1162,7 +1167,7 @@ td {
 }
 
 th {
-  background: #f5f7fa;
+  background: #f1f4f9;
   position: sticky;
   top: 0;
   z-index: 1;
