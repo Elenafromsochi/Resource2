@@ -3,6 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import asyncpg
+import logging
+
+
+logger = logging.getLogger('migrations')
 
 
 async def migrate(dsn: str) -> None:
@@ -22,7 +26,7 @@ async def migrate(dsn: str) -> None:
         applied = {row['name'] for row in rows}
         for migration in migrations:
             if migration.name in applied:
-                print(f'= {migration.name}')
+                logger.info('= %s', migration.name)
                 continue
             try:
                 content = migration.read_text(encoding='utf-8')
@@ -31,9 +35,9 @@ async def migrate(dsn: str) -> None:
                     'INSERT INTO migrations (name) VALUES ($1)',
                     migration.name,
                 )
-                print(f'+ {migration.name}')
+                logger.info('+ %s', migration.name)
             except Exception:
-                print(f'x {migration.name}')
+                logger.error('x %s', migration.name)
                 raise
     finally:
         await conn.close()
