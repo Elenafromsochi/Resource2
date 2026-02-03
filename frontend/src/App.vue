@@ -301,7 +301,7 @@
                   </span>
                 </th>
                 <th class="sortable" @click="setUserSort('messages_count')">
-                  Сообщения по каналам
+                  Сообщений
                   <span
                     v-if="userSort.key === 'messages_count'"
                     class="sort-indicator"
@@ -461,15 +461,17 @@ const formatUserName = (user) => {
 };
 
 const formatUserChannelMessages = (user) => {
+  const total = user?.messages_count ?? 0;
   if (!user?.channel_messages || user.channel_messages.length === 0) {
-    return "-";
+    return String(total);
   }
   const sorted = [...user.channel_messages].sort(
     (a, b) => a.channel_id - b.channel_id,
   );
-  return sorted
+  const perChannel = sorted
     .map((entry) => `${entry.channel_id}: ${entry.messages_count}`)
     .join(", ");
+  return `${total} (${perChannel})`;
 };
 
 const formatDaysAgo = (days) =>
