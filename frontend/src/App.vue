@@ -668,6 +668,8 @@ onMounted(async () => {
 .app {
   font-family: Arial, sans-serif;
   padding: 20px;
+  padding-left: 20%;
+  padding-right: 20%;
   color: #1f2933;
 }
 
