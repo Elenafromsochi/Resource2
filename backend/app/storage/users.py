@@ -1,3 +1,5 @@
+from typing import Any
+
 from .base import BaseRepository
 
 
@@ -101,7 +103,7 @@ class UsersRepository(BaseRepository):
         )
         return [dict(row) for row in rows]
 
-    async def get(self, user_id):
+    async def get(self, user_id: int) -> dict[str, Any] | None:
         row = await self.pool.fetchrow(
             'SELECT * FROM users WHERE id = $1',
             user_id,
