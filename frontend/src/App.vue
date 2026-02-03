@@ -1072,7 +1072,6 @@ onMounted(async () => {
   border-radius: 50%;
   background: #2f80ed;
   border: 1px solid #1b4f9a;
-  box-shadow: 0 0 0 2px #fff;
 }
 
 .range-input::-moz-range-track {
@@ -1088,7 +1087,6 @@ onMounted(async () => {
   border-radius: 50%;
   background: #2f80ed;
   border: 1px solid #1b4f9a;
-  box-shadow: 0 0 0 2px #fff;
 }
 
 .range-input-end::-webkit-slider-runnable-track {
