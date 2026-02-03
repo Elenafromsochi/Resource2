@@ -139,43 +139,53 @@ class Mediator:
             channels = await self.storage.channels.get_by_ids(channel_ids)
         else:
             channels = await self.storage.channels.list_all()
-        user_stats = {}
+        user_stats: dict[int, dict[str, Any]] = {}
+        errors: list[str] = []
         for channel in channels:
-            entity = await self.resolve_channel_entity(channel)
-            async for message in self.telegram.client.iter_messages(
-                entity,
-                offset_date=date_to,
-            ):
-                if message.date < date_from:
-                    break
-                sender_id = message.sender_id
-                if not sender_id:
-                    continue
-                stats = user_stats.setdefault(
-                    sender_id,
-                    {'total': 0, 'channels': {}},
-                )
-                stats['total'] += 1
-                stats['channels'][channel['id']] = (
-                    stats['channels'].get(channel['id'], 0) + 1
-                )
+            channel_id = channel.get('id')
+            try:
+                entity = await self.resolve_channel_entity(channel)
+            except Exception as exc:
+                errors.append(f'channel {channel_id}: {exc}')
+                continue
+            try:
+                async for message in self.telegram.client.iter_messages(
+                    entity,
+                    offset_date=date_to,
+                ):
+                    if message.date < date_from:
+                        break
+                    sender_id = message.sender_id
+                    if not sender_id:
+                        continue
+                    stats = user_stats.setdefault(
+                        sender_id,
+                        {'total': 0, 'channels': {}},
+                    )
+                    stats['total'] += 1
+                    stats['channels'][channel['id']] = (
+                        stats['channels'].get(channel['id'], 0) + 1
+                    )
+            except Exception as exc:
+                errors.append(f'channel {channel_id}: {exc}')
+                continue
 
         users_analyzed = 0
         for user_id, stats in user_stats.items():
             try:
                 user_entity, about = await self.get_user_details(user_id)
-            except ValueError:
-                continue
-            user = self.format_user(user_entity, about)
-            user['messages_count'] = stats['total']
-            await self.storage.users.upsert(user)
-            await self.storage.users.replace_user_channels(
-                user_id,
-                stats['channels'],
-            )
-            users_analyzed += 1
+                user = self.format_user(user_entity, about)
+                user['messages_count'] = stats['total']
+                await self.storage.users.upsert(user)
+                await self.storage.users.replace_user_channels(
+                    user_id,
+                    stats['channels'],
+                )
+                users_analyzed += 1
+            except Exception as exc:
+                errors.append(f'user {user_id}: {exc}')
 
-        return {'users_analyzed': users_analyzed}
+        return {'users_analyzed': users_analyzed, 'errors': errors}
 
     def normalize_identifier(self, value: str) -> str | int | None:
         raw = value.strip()

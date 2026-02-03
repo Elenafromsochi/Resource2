@@ -52,6 +52,21 @@
             </tbody>
           </table>
         </div>
+        <div
+          v-if="
+            analysisResult &&
+            analysisResult.errors &&
+            analysisResult.errors.length
+          "
+          class="analysis-errors"
+        >
+          <h3>Ошибки анализа</h3>
+          <ul>
+            <li v-for="(error, index) in analysisResult.errors" :key="index">
+              {{ error }}
+            </li>
+          </ul>
+        </div>
       </section>
 
       <section class="block">
@@ -354,6 +369,7 @@ const selectedChannelIds = ref([]);
 const userListFrom = ref("");
 const userListTo = ref("");
 const userListLoading = ref(false);
+const analysisResult = ref(null);
 
 const channelSort = ref({ key: null, direction: "asc" });
 const userSort = ref({ key: null, direction: "asc" });
@@ -594,6 +610,7 @@ const getUsersList = async () => {
     return;
   }
   userListLoading.value = true;
+  analysisResult.value = null;
   const dateFrom = new Date(`${userListFrom.value}T00:00:00Z`).toISOString();
   const dateTo = new Date(`${userListTo.value}T23:59:59Z`).toISOString();
   const payload = {
@@ -602,9 +619,13 @@ const getUsersList = async () => {
     channel_ids:
       selectedChannelIds.value.length > 0 ? selectedChannelIds.value : null,
   };
-  await api.post("/users/analyze", payload);
-  await fetchUsers(true);
-  userListLoading.value = false;
+  try {
+    const { data } = await api.post("/users/analyze", payload);
+    analysisResult.value = data;
+    await fetchUsers(true);
+  } finally {
+    userListLoading.value = false;
+  }
 };
 
 const toggleAllChannels = (event) => {
@@ -745,6 +766,27 @@ button:disabled {
 
 .analysis-table {
   max-height: 260px;
+}
+
+.analysis-errors {
+  border: 1px solid #f2b8b5;
+  background: #fff4f4;
+  color: #9b1c1c;
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 12px;
+}
+
+.analysis-errors h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+}
+
+.analysis-errors ul {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 4px;
 }
 
 table {
