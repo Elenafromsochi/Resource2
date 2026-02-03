@@ -46,6 +46,13 @@ class ChannelsRepository(BaseRepository):
         )
         return [dict(row) for row in rows]
 
+    async def get(self, channel_id):
+        row = await self.pool.fetchrow(
+            'SELECT * FROM channels WHERE id = $1',
+            channel_id,
+        )
+        return dict(row) if row else None
+
     async def get_by_ids(self, channel_ids):
         if not channel_ids:
             return []

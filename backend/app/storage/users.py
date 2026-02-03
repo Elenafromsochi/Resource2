@@ -101,6 +101,13 @@ class UsersRepository(BaseRepository):
         )
         return [dict(row) for row in rows]
 
+    async def get(self, user_id):
+        row = await self.pool.fetchrow(
+            'SELECT * FROM users WHERE id = $1',
+            user_id,
+        )
+        return dict(row) if row else None
+
     async def get_by_ids(self, user_ids):
         if not user_ids:
             return []

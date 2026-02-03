@@ -55,8 +55,7 @@ class Mediator:
 
     @async_cache
     async def get_channel_entity(self, channel_id: int) -> Channel | Chat:
-        stored = await self.storage.channels.get_by_ids([channel_id])
-        channel = stored[0] if stored else None
+        channel = await self.storage.channels.get(channel_id)
         if not channel:
             raise ValueError('Channel is not found')
         identifier = channel.get('username') or channel.get('link')
@@ -82,8 +81,7 @@ class Mediator:
 
     @async_cache
     async def get_user_entity(self, user_id: int) -> User:
-        stored = await self.storage.users.get_by_ids([user_id])
-        user_data = stored[0] if stored else None
+        user_data = await self.storage.users.get(user_id)
         if not user_data:
             raise ValueError('Entity is not a user')
         username = user_data.get('username')
