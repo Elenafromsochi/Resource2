@@ -3,7 +3,7 @@ import sys
 
 import colorlog
 
-from app import config
+from app.config import LOG_LEVEL
 
 
 def setup_logging() -> None:
@@ -21,4 +21,4 @@ def setup_logging() -> None:
             },
         ),
     )
-    logging.basicConfig(level=config.LOG_LEVEL, handlers=[handler])
+    logging.basicConfig(level=LOG_LEVEL, handlers=[handler])

@@ -7,7 +7,11 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import config
+from app.config import APP_HOST
+from app.config import APP_NAME
+from app.config import APP_PORT
+from app.config import CORS_ORIGINS
+from app.config import POSTGRES_URL
 from app.db.storage import Storage
 from app.db.utils import apply_migrations
 from app.logging_config import setup_logging
@@ -35,10 +39,10 @@ async def lifespan(app: FastAPI):
 
 
 def build_app() -> FastAPI:
-    app = FastAPI(title=config.APP_NAME, lifespan=lifespan, root_path='/api')
+    app = FastAPI(title=APP_NAME, lifespan=lifespan, root_path='/api')
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=config.CORS_ORIGINS,
+        allow_origins=CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=['*'],
         allow_headers=['*'],
@@ -52,8 +56,8 @@ app = build_app()
 
 def run() -> None:
     setup_logging()
-    asyncio.run(apply_migrations(config.POSTGRES_URL))
-    uvicorn.run(app, host=config.APP_HOST, port=config.APP_PORT)
+    asyncio.run(apply_migrations(POSTGRES_URL))
+    uvicorn.run(app, host=APP_HOST, port=APP_PORT)
 
 
 if __name__ == '__main__':

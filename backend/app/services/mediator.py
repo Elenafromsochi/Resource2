@@ -21,7 +21,7 @@ class Mediator:
         self.storage = storage
 
     async def get_channel_entity(self, value: str) -> Channel | Chat:
-        normalized = self._normalize_identifier(value)
+        normalized = self.normalize_identifier(value)
         if normalized is None:
             raise ValueError('Empty channel identifier')
         entity = await self.telegram.client.get_entity(normalized)
@@ -30,7 +30,7 @@ class Mediator:
         return entity
 
     async def get_user_entity(self, value: str) -> User:
-        normalized = self._normalize_identifier(value)
+        normalized = self.normalize_identifier(value)
         if normalized is None:
             raise ValueError('Empty user identifier')
         entity = await self.telegram.client.get_entity(normalized)
@@ -60,7 +60,7 @@ class Mediator:
             channels = await self.storage.channels.list_all()
         user_stats = {}
         for channel in channels:
-            entity = await self._resolve_channel_entity(channel)
+            entity = await self.resolve_channel_entity(channel)
             async for message in self.telegram.client.iter_messages(
                 entity,
                 offset_date=date_to,
@@ -80,8 +80,8 @@ class Mediator:
                 )
 
         for user_id, stats in user_stats.items():
-            user_entity, about = await self._get_user_details(user_id)
-            user = self._format_user(user_entity, about)
+            user_entity, about = await self.get_user_details(user_id)
+            user = self.format_user(user_entity, about)
             user['messages_count'] = stats['total']
             await self.storage.users.upsert(user)
             await self.storage.users.replace_user_channels(
@@ -91,7 +91,7 @@ class Mediator:
 
         return {'users_analyzed': len(user_stats)}
 
-    def _normalize_identifier(self, value: str) -> str | int | None:
+    def normalize_identifier(self, value: str) -> str | int | None:
         raw = value.strip()
         if not raw:
             return None
@@ -104,12 +104,12 @@ class Mediator:
             return int(raw)
         return raw
 
-    async def _resolve_channel_entity(self, channel: dict[str, Any]) -> Channel | Chat:
+    async def resolve_channel_entity(self, channel: dict[str, Any]) -> Channel | Chat:
         if channel.get('username'):
             return await self.telegram.client.get_entity(channel['username'])
         return await self.telegram.client.get_entity(channel['id'])
 
-    def _format_channel(self, entity: Channel | Chat) -> dict[str, Any]:
+    def format_channel(self, entity: Channel | Chat) -> dict[str, Any]:
         channel_type = 'channel'
         if isinstance(entity, Chat):
             channel_type = 'group'
@@ -126,10 +126,7 @@ class Mediator:
             'link': link,
         }
 
-    def format_channel(self, entity: Channel | Chat) -> dict[str, Any]:
-        return self._format_channel(entity)
-
-    async def _get_user_details(self, user_id: int) -> tuple[User, str | None]:
+    async def get_user_details(self, user_id: int) -> tuple[User, str | None]:
         user = await self.telegram.client.get_entity(user_id)
         about = None
         try:
@@ -139,7 +136,7 @@ class Mediator:
             about = None
         return user, about
 
-    def _format_user(self, entity: User, about: str | None) -> dict[str, Any]:
+    def format_user(self, entity: User, about: str | None) -> dict[str, Any]:
         return {
             'id': entity.id,
             'username': entity.username,
