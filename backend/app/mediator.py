@@ -82,6 +82,13 @@ class Mediator:
     @async_cache
     async def get_user_entity(self, user_id: int) -> User:
         user_data = await self.storage.users.get(user_id)
+        entity = None
+        try:
+            entity = await self.telegram.client.get_entity(user_id)
+        except Exception:
+            entity = None
+        if isinstance(entity, User):
+            return entity
         if not user_data:
             raise ValueError('Entity is not a user')
         username = user_data.get('username')
@@ -153,8 +160,12 @@ class Mediator:
                     stats['channels'].get(channel['id'], 0) + 1
                 )
 
+        users_analyzed = 0
         for user_id, stats in user_stats.items():
-            user_entity, about = await self.get_user_details(user_id)
+            try:
+                user_entity, about = await self.get_user_details(user_id)
+            except ValueError:
+                continue
             user = self.format_user(user_entity, about)
             user['messages_count'] = stats['total']
             await self.storage.users.upsert(user)
@@ -162,8 +173,9 @@ class Mediator:
                 user_id,
                 stats['channels'],
             )
+            users_analyzed += 1
 
-        return {'users_analyzed': len(user_stats)}
+        return {'users_analyzed': users_analyzed}
 
     def normalize_identifier(self, value: str) -> str | int | None:
         raw = value.strip()
