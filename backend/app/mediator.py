@@ -57,10 +57,12 @@ class Mediator:
         channel = await self.storage.channels.get(channel_id)
         if not channel:
             raise ValueError('Channel is not found')
-        try:
-            entity = await self.telegram.client.get_entity(channel_id)
-        except Exception:
-            entity = None
+        entity = None
+        if channel_id > 0:
+            peer_id = self.make_channel_peer_id(channel_id)
+            entity = await self.safe_get_entity(peer_id)
+        if not isinstance(entity, (Channel, Chat)):
+            entity = await self.safe_get_entity(channel_id)
         if isinstance(entity, (Channel, Chat)):
             return entity
         username = channel.get('username')
@@ -78,7 +80,15 @@ class Mediator:
         normalized = self.normalize_identifier(value)
         if normalized is None:
             raise ValueError('Empty channel identifier')
-        entity = await self.telegram.client.get_entity(normalized)
+        entity = None
+        if isinstance(normalized, int):
+            if normalized > 0:
+                peer_id = self.make_channel_peer_id(normalized)
+                entity = await self.safe_get_entity(peer_id)
+            if not isinstance(entity, (Channel, Chat)):
+                entity = await self.safe_get_entity(normalized)
+        else:
+            entity = await self.safe_get_entity(normalized)
         if not isinstance(entity, (Channel, Chat)):
             raise ValueError('Entity is not a channel or group')
         return entity
@@ -180,9 +190,21 @@ class Mediator:
             return match.group(1)
         if raw.startswith('@'):
             return raw[1:]
-        if raw.isdigit():
+        if raw.lstrip('-').isdigit():
             return int(raw)
         return raw
+
+    @staticmethod
+    def make_channel_peer_id(channel_id: int) -> int:
+        if channel_id <= 0:
+            return channel_id
+        return int(f'-100{channel_id}')
+
+    async def safe_get_entity(self, identifier: str | int) -> Channel | Chat | User | None:
+        try:
+            return await self.telegram.client.get_entity(identifier)
+        except Exception:
+            return None
 
     async def resolve_channel_entity(self, channel: dict[str, Any]) -> Channel | Chat:
         return await self.get_channel_entity(channel['id'])
