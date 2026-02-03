@@ -1,6 +1,11 @@
-class ChannelsRepository:
-    def __init__(self, pool):
-        self.pool = pool
+import asyncpg
+
+from app.db.repositories.base import BaseRepository
+
+
+class ChannelsRepository(BaseRepository):
+    def __init__(self, pool: asyncpg.Pool) -> None:
+        super().__init__(pool)
 
     async def upsert(self, channel):
         row = await self.pool.fetchrow(

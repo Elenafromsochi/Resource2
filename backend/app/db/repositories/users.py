@@ -1,6 +1,11 @@
-class UsersRepository:
-    def __init__(self, pool):
-        self.pool = pool
+import asyncpg
+
+from app.db.repositories.base import BaseRepository
+
+
+class UsersRepository(BaseRepository):
+    def __init__(self, pool: asyncpg.Pool) -> None:
+        super().__init__(pool)
 
     async def upsert(self, user):
         row = await self.pool.fetchrow(
