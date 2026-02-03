@@ -1039,6 +1039,7 @@ onMounted(async () => {
   margin: 0;
   background: transparent;
   pointer-events: none;
+  direction: rtl;
   -webkit-appearance: none;
   appearance: none;
 }
@@ -1082,6 +1083,14 @@ onMounted(async () => {
   background: #2f80ed;
   border: 1px solid #1b4f9a;
   box-shadow: 0 0 0 2px #fff;
+}
+
+.range-input-end::-webkit-slider-runnable-track {
+  background: transparent;
+}
+
+.range-input-end::-moz-range-track {
+  background: transparent;
 }
 
 .range-values {
