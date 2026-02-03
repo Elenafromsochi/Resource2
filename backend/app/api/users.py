@@ -26,8 +26,9 @@ async def list_users(
     request: Request,
     offset: int = Query(0),
     limit: int = Query(30),
+    search: str | None = Query(None),
 ):
-    items = await request.app.state.storage.users.list(offset, limit)
+    items = await request.app.state.storage.users.list(offset, limit, search)
     next_offset = offset + limit if len(items) == limit else None
     return {'items': items, 'next_offset': next_offset}
 

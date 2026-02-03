@@ -29,7 +29,31 @@ class ChannelsRepository(BaseRepository):
     async def delete(self, channel_id):
         await self.pool.execute('DELETE FROM channels WHERE id = $1', channel_id)
 
-    async def list(self, offset, limit):
+    async def list(self, offset, limit, search: str | None = None):
+        if search:
+            search_value = search.strip()
+            if search_value:
+                normalized = search_value.lstrip('@')
+                if not normalized:
+                    normalized = search_value
+                id_pattern = f"%{search_value}%"
+                text_pattern = f"%{normalized}%"
+                rows = await self.pool.fetch(
+                    """
+                    SELECT *
+                    FROM channels
+                    WHERE CAST(id AS TEXT) ILIKE $1
+                       OR COALESCE(username, '') ILIKE $2
+                       OR COALESCE(title, '') ILIKE $2
+                    ORDER BY updated_at DESC, id DESC
+                    OFFSET $3 LIMIT $4
+                    """,
+                    id_pattern,
+                    text_pattern,
+                    offset,
+                    limit,
+                )
+                return [dict(row) for row in rows]
         rows = await self.pool.fetch(
             """
             SELECT *
