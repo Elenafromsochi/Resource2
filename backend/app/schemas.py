@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel
+from pydantic import Field
 
 
 class ChannelCreate(BaseModel):
@@ -39,6 +40,7 @@ class AnalyzeRequest(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     users_analyzed: int
+    errors: list[str] = Field(default_factory=list)
 
 
 class UserOut(BaseModel):
