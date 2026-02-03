@@ -1,0 +1,32 @@
+import os
+
+# App
+APP_NAME = "Telegram Activity Monitor"
+APP_HOST = "0.0.0.0"
+APP_PORT = 8000
+LOG_LEVEL = "INFO"
+
+# Database
+POSTGRES_HOST = os.environ["POSTGRES_HOST"]
+POSTGRES_PORT = os.environ["POSTGRES_PORT"]
+POSTGRES_DB = os.environ["POSTGRES_DB"]
+POSTGRES_USER = os.environ["POSTGRES_USER"]
+POSTGRES_PASSWORD = os.environ["POSTGRES_PASSWORD"]
+DATABASE_DSN = (
+    f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}"
+    f"@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+)
+DB_POOL_MIN = 1
+DB_POOL_MAX = 10
+
+# Telegram
+TELEGRAM_API_ID = int(os.environ["TELEGRAM_API_ID"])
+TELEGRAM_API_HASH = os.environ["TELEGRAM_API_HASH"]
+TELETHON_SESSION = os.environ["TELETHON_SESSION"]
+
+# DeepSeek
+DEEPSEEK_API_KEY = os.environ["DEEPSEEK_API_KEY"]
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+
+# API
+CORS_ORIGINS = ["*"]

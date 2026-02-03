@@ -1,0 +1,6 @@
+asyncpg
+colorlog
+fastapi
+openai
+telethon
+uvicorn[standard]
