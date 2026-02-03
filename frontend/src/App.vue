@@ -4,10 +4,62 @@
       <h1>Telegram Activity Monitor</h1>
     </header>
 
-    <section class="controls">
-      <div class="control-group">
-        <label for="channel-input">Добавить канал или группу</label>
+    <main class="stack">
+      <section class="block">
+        <h2>Анализ активности</h2>
         <div class="row">
+          <input v-model="userListFrom" type="date" />
+          <input v-model="userListTo" type="date" />
+          <button :disabled="userListLoading" @click="getUsersList">
+            Получить список пользователей
+          </button>
+        </div>
+        <div class="table-container analysis-table">
+          <table>
+            <thead>
+              <tr>
+                <th class="select-cell">
+                  <label class="checkbox">
+                    <input
+                      type="checkbox"
+                      :checked="selectAllChannels"
+                      @change="toggleAllChannels"
+                    />
+                    Все
+                  </label>
+                </th>
+                <th>Название</th>
+                <th>Username</th>
+                <th>Тип</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="channel in sortedChannelsForSelect" :key="channel.id">
+                <td class="select-cell">
+                  <input
+                    type="checkbox"
+                    :value="channel.id"
+                    v-model="selectedChannelIds"
+                  />
+                </td>
+                <td>{{ channel.title }}</td>
+                <td>{{ channel.username || "-" }}</td>
+                <td>{{ channel.channel_type }}</td>
+              </tr>
+              <tr v-if="sortedChannelsForSelect.length === 0">
+                <td colspan="4" class="muted">Нет каналов</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="block">
+        <h2>Каналы и группы</h2>
+        <label class="field-label" for="channel-input">
+          Добавить канал или группу
+        </label>
+        <div class="row compact">
           <input
             id="channel-input"
             v-model="newChannelValue"
@@ -21,98 +73,149 @@
             Импортировать из диалогов
           </button>
         </div>
-      </div>
-
-      <div class="control-group">
-        <label>Анализ активности</label>
-        <div class="row">
-          <input v-model="analyzeFrom" type="date" />
-          <input v-model="analyzeTo" type="date" />
-          <button :disabled="analysisLoading" @click="analyzeUsers">
-            Запустить анализ
-          </button>
-        </div>
-        <div class="channel-selector">
-          <span>Каналы для анализа:</span>
-          <label class="checkbox">
-            <input
-              type="checkbox"
-              :checked="selectAllChannels"
-              @change="toggleAllChannels"
-            />
-            Все
-          </label>
-          <label
-            v-for="channel in channelsForSelect"
-            :key="channel.id"
-            class="checkbox"
-          >
-            <input
-              type="checkbox"
-              :value="channel.id"
-              v-model="selectedChannelIds"
-            />
-            {{ channel.title }}
-          </label>
-        </div>
-      </div>
-    </section>
-
-    <section class="tables">
-      <div class="table-block">
-        <h2>Каналы и группы</h2>
         <div class="table-container" @scroll="onChannelsScroll">
-          <table>
+          <table class="compact-table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Название</th>
-                <th>Username</th>
-                <th>Тип</th>
+                <th class="sortable" @click="setChannelSort('photo')">
+                  Фото
+                  <span v-if="channelSort.key === 'photo'" class="sort-indicator">
+                    {{ channelSort.direction === "asc" ? "^" : "v" }}
+                  </span>
+                </th>
+                <th class="sortable" @click="setChannelSort('id')">
+                  ID
+                  <span v-if="channelSort.key === 'id'" class="sort-indicator">
+                    {{ channelSort.direction === "asc" ? "^" : "v" }}
+                  </span>
+                </th>
+                <th class="sortable" @click="setChannelSort('title')">
+                  Название
+                  <span v-if="channelSort.key === 'title'" class="sort-indicator">
+                    {{ channelSort.direction === "asc" ? "^" : "v" }}
+                  </span>
+                </th>
+                <th class="sortable" @click="setChannelSort('username')">
+                  Username
+                  <span v-if="channelSort.key === 'username'" class="sort-indicator">
+                    {{ channelSort.direction === "asc" ? "^" : "v" }}
+                  </span>
+                </th>
+                <th class="sortable" @click="setChannelSort('channel_type')">
+                  Тип
+                  <span
+                    v-if="channelSort.key === 'channel_type'"
+                    class="sort-indicator"
+                  >
+                    {{ channelSort.direction === "asc" ? "^" : "v" }}
+                  </span>
+                </th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="channel in channels" :key="channel.id">
+              <tr v-for="channel in sortedChannels" :key="channel.id">
+                <td class="photo-cell">
+                  <div
+                    class="avatar"
+                    :class="{ placeholder: !getChannelAvatarUrl(channel) }"
+                  >
+                    <img
+                      v-if="getChannelAvatarUrl(channel)"
+                      :src="getChannelAvatarUrl(channel)"
+                      alt=""
+                      loading="lazy"
+                    />
+                  </div>
+                </td>
                 <td>{{ channel.id }}</td>
                 <td>{{ channel.title }}</td>
                 <td>{{ channel.username || "-" }}</td>
                 <td>{{ channel.channel_type }}</td>
                 <td class="actions">
-                  <button @click="removeChannel(channel.id)">Удалить</button>
+                  <button
+                    class="icon-button"
+                    type="button"
+                    title="Удалить"
+                    @click="removeChannel(channel.id)"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM6 9h2v9H6V9z"
+                        fill="currentColor"
+                      />
+                    </svg>
+                  </button>
                 </td>
               </tr>
               <tr v-if="channelLoading">
-                <td colspan="5" class="muted">Загрузка...</td>
+                <td colspan="6" class="muted">Загрузка...</td>
               </tr>
               <tr v-if="!channelLoading && channels.length === 0">
-                <td colspan="5" class="muted">Нет каналов</td>
+                <td colspan="6" class="muted">Нет каналов</td>
               </tr>
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
-      <div class="table-block">
+      <section class="block">
         <h2>Пользователи</h2>
         <div class="table-container" @scroll="onUsersScroll">
-          <table>
+          <table class="compact-table">
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Имя</th>
-                <th>Username</th>
-                <th>Сообщений</th>
-                <th>Обновлено</th>
+                <th class="sortable" @click="setUserSort('photo')">
+                  Фото
+                  <span v-if="userSort.key === 'photo'" class="sort-indicator">
+                    {{ userSort.direction === "asc" ? "^" : "v" }}
+                  </span>
+                </th>
+                <th class="sortable" @click="setUserSort('id')">
+                  ID
+                  <span v-if="userSort.key === 'id'" class="sort-indicator">
+                    {{ userSort.direction === "asc" ? "^" : "v" }}
+                  </span>
+                </th>
+                <th class="sortable" @click="setUserSort('name')">
+                  Имя
+                  <span v-if="userSort.key === 'name'" class="sort-indicator">
+                    {{ userSort.direction === "asc" ? "^" : "v" }}
+                  </span>
+                </th>
+                <th class="sortable" @click="setUserSort('username')">
+                  Username
+                  <span v-if="userSort.key === 'username'" class="sort-indicator">
+                    {{ userSort.direction === "asc" ? "^" : "v" }}
+                  </span>
+                </th>
+                <th class="sortable" @click="setUserSort('messages_count')">
+                  Сообщений
+                  <span
+                    v-if="userSort.key === 'messages_count'"
+                    class="sort-indicator"
+                  >
+                    {{ userSort.direction === "asc" ? "^" : "v" }}
+                  </span>
+                </th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="user in users" :key="user.id">
+              <tr v-for="user in sortedUsers" :key="user.id">
+                <td class="photo-cell">
+                  <div class="avatar" :class="{ placeholder: !getUserAvatarUrl(user) }">
+                    <img
+                      v-if="getUserAvatarUrl(user)"
+                      :src="getUserAvatarUrl(user)"
+                      alt=""
+                      loading="lazy"
+                    />
+                  </div>
+                </td>
                 <td>{{ user.id }}</td>
                 <td>{{ formatUserName(user) }}</td>
                 <td>{{ user.username || "-" }}</td>
                 <td>{{ user.messages_count }}</td>
-                <td>{{ formatDate(user.updated_at) }}</td>
               </tr>
               <tr v-if="userLoading">
                 <td colspan="5" class="muted">Загрузка...</td>
@@ -123,8 +226,8 @@
             </tbody>
           </table>
         </div>
-      </div>
-    </section>
+      </section>
+    </main>
   </div>
 </template>
 
@@ -134,6 +237,7 @@ import { computed, onMounted, ref } from "vue";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 const api = axios.create({ baseURL: API_BASE });
+const TELEGRAM_AVATAR_BASE = "https://t.me/i/userpic/320/";
 
 const channels = ref([]);
 const channelOffset = ref(0);
@@ -149,14 +253,136 @@ const newChannelValue = ref("");
 const channelsForSelect = ref([]);
 const selectedChannelIds = ref([]);
 
-const analyzeFrom = ref("");
-const analyzeTo = ref("");
-const analysisLoading = ref(false);
+const userListFrom = ref("");
+const userListTo = ref("");
+const userListLoading = ref(false);
+
+const channelSort = ref({ key: null, direction: "asc" });
+const userSort = ref({ key: null, direction: "asc" });
 
 const selectAllChannels = computed(() => {
   return (
     channelsForSelect.value.length > 0 &&
     selectedChannelIds.value.length === channelsForSelect.value.length
+  );
+});
+
+const collator = new Intl.Collator("ru", { numeric: true, sensitivity: "base" });
+
+const getUserNameValue = (user) => {
+  const parts = [user.first_name, user.last_name].filter(Boolean);
+  return parts.join(" ");
+};
+
+const formatUserName = (user) => {
+  const fullName = getUserNameValue(user);
+  return fullName ? fullName : "-";
+};
+
+const isHttpUrl = (value) =>
+  typeof value === "string" && /^https?:\/\//i.test(value);
+
+const extractHandle = (value) => {
+  if (!value) {
+    return "";
+  }
+  const match = value.match(/t\.me\/([a-zA-Z0-9_]+)/);
+  return match ? match[1] : "";
+};
+
+const buildAvatarUrl = (username, photo) => {
+  if (photo && isHttpUrl(photo)) {
+    return photo;
+  }
+  if (username) {
+    return `${TELEGRAM_AVATAR_BASE}${username}.jpg`;
+  }
+  return "";
+};
+
+const getChannelAvatarKey = (channel) =>
+  channel.username || extractHandle(channel.link);
+
+const getUserAvatarKey = (user) =>
+  isHttpUrl(user.photo) ? user.photo : user.username || "";
+
+const getChannelAvatarUrl = (channel) => {
+  const handle = getChannelAvatarKey(channel);
+  return buildAvatarUrl(handle);
+};
+
+const getUserAvatarUrl = (user) => buildAvatarUrl(user.username, user.photo);
+
+const compareValues = (valueA, valueB) => {
+  if (valueA === valueB) {
+    return 0;
+  }
+  if (valueA === null || valueA === undefined || valueA === "") {
+    return 1;
+  }
+  if (valueB === null || valueB === undefined || valueB === "") {
+    return -1;
+  }
+  if (typeof valueA === "number" && typeof valueB === "number") {
+    return valueA - valueB;
+  }
+  return collator.compare(String(valueA), String(valueB));
+};
+
+const sortRecords = (records, sortState, sorters) => {
+  if (!sortState.key || !sorters[sortState.key]) {
+    return records;
+  }
+  return [...records].sort((a, b) => {
+    const valueA = sorters[sortState.key](a);
+    const valueB = sorters[sortState.key](b);
+    const result = compareValues(valueA, valueB);
+    return sortState.direction === "asc" ? result : -result;
+  });
+};
+
+const setSort = (sortRef, key) => {
+  const current = sortRef.value;
+  if (current.key === key) {
+    sortRef.value = {
+      key,
+      direction: current.direction === "asc" ? "desc" : "asc",
+    };
+    return;
+  }
+  sortRef.value = { key, direction: "asc" };
+};
+
+const setChannelSort = (key) => setSort(channelSort, key);
+const setUserSort = (key) => setSort(userSort, key);
+
+const channelSorters = {
+  photo: (channel) => getChannelAvatarKey(channel),
+  id: (channel) => channel.id,
+  title: (channel) => channel.title || "",
+  username: (channel) => channel.username || "",
+  channel_type: (channel) => channel.channel_type || "",
+};
+
+const userSorters = {
+  photo: (user) => getUserAvatarKey(user),
+  id: (user) => user.id,
+  name: (user) => getUserNameValue(user),
+  username: (user) => user.username || "",
+  messages_count: (user) => user.messages_count ?? 0,
+};
+
+const sortedChannels = computed(() =>
+  sortRecords(channels.value, channelSort.value, channelSorters),
+);
+
+const sortedUsers = computed(() =>
+  sortRecords(users.value, userSort.value, userSorters),
+);
+
+const sortedChannelsForSelect = computed(() => {
+  return [...channelsForSelect.value].sort((a, b) =>
+    collator.compare(a.title || "", b.title || ""),
   );
 });
 
@@ -232,13 +458,13 @@ const importDialogs = async () => {
   await fetchChannelsForSelect();
 };
 
-const analyzeUsers = async () => {
-  if (!analyzeFrom.value || !analyzeTo.value) {
+const getUsersList = async () => {
+  if (!userListFrom.value || !userListTo.value) {
     return;
   }
-  analysisLoading.value = true;
-  const dateFrom = new Date(`${analyzeFrom.value}T00:00:00Z`).toISOString();
-  const dateTo = new Date(`${analyzeTo.value}T23:59:59Z`).toISOString();
+  userListLoading.value = true;
+  const dateFrom = new Date(`${userListFrom.value}T00:00:00Z`).toISOString();
+  const dateTo = new Date(`${userListTo.value}T23:59:59Z`).toISOString();
   const payload = {
     date_from: dateFrom,
     date_to: dateTo,
@@ -247,7 +473,7 @@ const analyzeUsers = async () => {
   };
   await api.post("/users/analyze", payload);
   await fetchUsers(true);
-  analysisLoading.value = false;
+  userListLoading.value = false;
 };
 
 const toggleAllChannels = (event) => {
@@ -274,18 +500,6 @@ const onUsersScroll = (event) => {
   }
 };
 
-const formatUserName = (user) => {
-  const parts = [user.first_name, user.last_name].filter(Boolean);
-  return parts.length ? parts.join(" ") : "-";
-};
-
-const formatDate = (value) => {
-  if (!value) {
-    return "-";
-  }
-  return new Date(value).toLocaleString();
-};
-
 onMounted(async () => {
   await fetchChannels(true);
   await fetchChannelsForSelect();
@@ -301,19 +515,32 @@ onMounted(async () => {
 }
 
 .header {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
-.controls {
-  display: grid;
+.stack {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  margin-bottom: 24px;
 }
 
-.control-group label {
-  display: block;
+.block {
+  border: 1px solid #e4e7eb;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.block h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.field-label {
   font-weight: 600;
-  margin-bottom: 8px;
+  font-size: 12px;
 }
 
 .row {
@@ -322,21 +549,27 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 
+.row.compact {
+  gap: 6px;
+}
+
 input[type="text"],
 input[type="date"] {
-  padding: 6px 8px;
+  padding: 5px 8px;
   border: 1px solid #cbd2d9;
   border-radius: 4px;
-  min-width: 220px;
+  min-width: 200px;
+  font-size: 12px;
 }
 
 button {
-  padding: 6px 12px;
+  padding: 6px 10px;
   border: none;
   border-radius: 4px;
   background: #2f80ed;
   color: #fff;
   cursor: pointer;
+  font-size: 12px;
 }
 
 button:disabled {
@@ -344,37 +577,15 @@ button:disabled {
   cursor: not-allowed;
 }
 
-.channel-selector {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  margin-top: 8px;
-}
-
-.checkbox {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  font-size: 12px;
-}
-
-.tables {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 20px;
-}
-
-.table-block h2 {
-  margin-bottom: 8px;
-  font-size: 16px;
-}
-
 .table-container {
-  max-height: 420px;
+  max-height: 380px;
   overflow-y: auto;
   border: 1px solid #e4e7eb;
   border-radius: 6px;
+}
+
+.analysis-table {
+  max-height: 260px;
 }
 
 table {
@@ -383,11 +594,21 @@ table {
   font-size: 12px;
 }
 
+.compact-table {
+  font-size: 11px;
+}
+
 th,
 td {
   padding: 6px 8px;
   border-bottom: 1px solid #f0f2f5;
   text-align: left;
+  vertical-align: middle;
+}
+
+.compact-table th,
+.compact-table td {
+  padding: 4px 6px;
 }
 
 th {
@@ -397,8 +618,74 @@ th {
   z-index: 1;
 }
 
-.actions button {
-  background: #e74c3c;
+.sortable {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.sort-indicator {
+  margin-left: 4px;
+  font-size: 10px;
+  color: #6b7280;
+}
+
+.checkbox {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.select-cell {
+  width: 60px;
+}
+
+.photo-cell {
+  width: 44px;
+}
+
+.avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #f0f2f5;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatar.placeholder {
+  background: #e4e7eb;
+}
+
+.actions {
+  text-align: right;
+}
+
+.icon-button {
+  padding: 0;
+  width: 26px;
+  height: 26px;
+  background: #fbe9e7;
+  color: #c0392b;
+  border: 1px solid #f4c6c0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-button svg {
+  width: 14px;
+  height: 14px;
 }
 
 .muted {
