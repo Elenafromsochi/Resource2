@@ -19,16 +19,16 @@ services:
       TELETHON_STRING_SESSION: ${TELETHON_STRING_SESSION}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
     ports:
-      - 8001:8000
+      - 8000:8000
     depends_on:
       - postgres
 
   frontend:
     build: ./frontend
     environment:
-      VITE_API_URL: http://localhost:8001
+      VITE_API_URL: http://localhost:8000
     ports:
-      - 5174:5173
+      - 5173:5173
     depends_on:
       - backend
 
