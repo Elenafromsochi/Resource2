@@ -15,6 +15,13 @@
               <span class="range-days">{{ analysisRangeDaysLabel }}</span>
             </div>
             <div class="range-slider">
+              <div class="range-ticks" aria-hidden="true">
+                <span
+                  v-for="tick in rangeTickValues"
+                  :key="`tick-${tick}`"
+                  class="range-tick"
+                ></span>
+              </div>
               <input
                 class="range-input range-input-start"
                 type="range"
@@ -548,6 +555,37 @@ const analysisRangeDaysLabel = computed(() => {
   return `от ${fromLabel} до ${toLabel}`;
 });
 
+const rangeTickStep = computed(() => {
+  if (analysisRangeMaxDays <= 30) {
+    return 1;
+  }
+  if (analysisRangeMaxDays <= 60) {
+    return 2;
+  }
+  if (analysisRangeMaxDays <= 120) {
+    return 5;
+  }
+  if (analysisRangeMaxDays <= 180) {
+    return 10;
+  }
+  if (analysisRangeMaxDays <= 365) {
+    return 15;
+  }
+  return 30;
+});
+
+const rangeTickValues = computed(() => {
+  const ticks = [];
+  const step = rangeTickStep.value;
+  for (let value = 0; value <= analysisRangeMaxDays; value += step) {
+    ticks.push(value);
+  }
+  if (ticks[ticks.length - 1] !== analysisRangeMaxDays) {
+    ticks.push(analysisRangeMaxDays);
+  }
+  return ticks;
+});
+
 const rangeFromLabel = computed(() => formatDaysAgo(rangeEndDays.value));
 const rangeToLabel = computed(() => formatDaysAgo(rangeStartDays.value));
 
@@ -1034,6 +1072,26 @@ onMounted(async () => {
   position: relative;
   width: 100%;
   height: 28px;
+}
+
+.range-ticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 6px;
+  height: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.range-tick {
+  width: 1px;
+  height: 8px;
+  background: #b7c1cd;
+  border-radius: 999px;
 }
 
 .range-input {
