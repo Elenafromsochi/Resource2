@@ -21,6 +21,16 @@ class ChannelListResponse(BaseModel):
     next_offset: int | None
 
 
+class ChannelDetailsResponse(BaseModel):
+    id: int
+    username: str | None
+    title: str
+    channel_type: str
+    link: str | None
+    about: str | None
+    members_count: int | None
+
+
 class AnalyzeRequest(BaseModel):
     date_from: datetime
     date_to: datetime
