@@ -32,17 +32,12 @@ async def lifespan(app: FastAPI):
     await storage.close()
 
 
-def build_app() -> FastAPI:
-    app = FastAPI(title=APP_NAME, lifespan=lifespan, root_path=API_ROOT_PATH)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=CORS_ORIGINS,
-        allow_credentials=True,
-        allow_methods=['*'],
-        allow_headers=['*'],
-    )
-    app.include_router(api_router)
-    return app
-
-
-app = build_app()
+app = FastAPI(title=APP_NAME, lifespan=lifespan, root_path=API_ROOT_PATH)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
+app.include_router(api_router)
