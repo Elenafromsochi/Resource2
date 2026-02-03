@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 
-from app.routes.api.channels import router as channels_router
-from app.routes.api.other import router as other_router
-from app.routes.api.users import router as users_router
+from app.api.channels import router as channels_router
+from app.api.other import router as other_router
+from app.api.users import router as users_router
 
 
 router = APIRouter(prefix='/api')

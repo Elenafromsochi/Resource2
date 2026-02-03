@@ -9,7 +9,7 @@ from app.config import API_ROOT_PATH
 from app.config import APP_NAME
 from app.config import CORS_ORIGINS
 from app.db.storage import Storage
-from app.routes.api import router as api_router
+from app.api import router as api_router
 from app.services.deepseek import DeepSeek
 from app.services.mediator import Mediator
 from app.services.telegram import Telegram
