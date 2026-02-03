@@ -16,9 +16,10 @@
             <div class="range-slider">
               <div class="range-ticks" aria-hidden="true">
                 <span
-                  v-for="tick in rangeTickValues"
-                  :key="`tick-${tick}`"
+                  v-for="tick in rangeDayTicks"
+                  :key="`tick-${tick.value}`"
                   class="range-tick"
+                  :style="{ left: tick.left }"
                 ></span>
               </div>
               <input
@@ -545,35 +546,13 @@ const analysisRangeLabel = computed(() => {
   return `${from} — ${to}`;
 });
 
-const rangeTickStep = computed(() => {
-  if (analysisRangeMaxDays <= 30) {
-    return 1;
-  }
-  if (analysisRangeMaxDays <= 60) {
-    return 2;
-  }
-  if (analysisRangeMaxDays <= 120) {
-    return 5;
-  }
-  if (analysisRangeMaxDays <= 180) {
-    return 10;
-  }
-  if (analysisRangeMaxDays <= 365) {
-    return 15;
-  }
-  return 30;
-});
-
-const rangeTickValues = computed(() => {
-  const ticks = [];
-  const step = rangeTickStep.value;
-  for (let value = 0; value <= analysisRangeMaxDays; value += step) {
-    ticks.push(value);
-  }
-  if (ticks[ticks.length - 1] !== analysisRangeMaxDays) {
-    ticks.push(analysisRangeMaxDays);
-  }
-  return ticks;
+const rangeDayTicks = computed(() => {
+  const maxDays = analysisRangeMaxDays;
+  const safeMax = maxDays > 0 ? maxDays : 1;
+  return Array.from({ length: maxDays + 1 }, (_, value) => ({
+    value,
+    left: `${(value / safeMax) * 100}%`,
+  }));
 });
 
 const rangeFromLabel = computed(() => formatDaysAgo(rangeEndDays.value));
@@ -1069,34 +1048,32 @@ onMounted(async () => {
 
 .range-ticks {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 6px;
-  height: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  inset: 0;
   pointer-events: none;
   z-index: 1;
 }
 
 .range-tick {
+  position: absolute;
+  top: 50%;
   width: 1px;
   height: 8px;
   background: #b7c1cd;
   border-radius: 999px;
+  transform: translate(-50%, -50%);
 }
 
 .range-input {
   position: absolute;
   left: 0;
   right: 0;
-  top: 8px;
+  top: 50%;
   width: 100%;
   margin: 0;
   background: transparent;
   pointer-events: none;
   direction: rtl;
+  transform: translateY(-50%);
   -webkit-appearance: none;
   appearance: none;
 }
