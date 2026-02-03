@@ -75,3 +75,22 @@ class UsersRepository(BaseRepository):
             user_ids,
         )
         return [dict(row) for row in rows]
+
+    async def list_user_groups(self, user_id):
+        rows = await self.pool.fetch(
+            """
+            SELECT
+                c.id,
+                c.username,
+                c.title,
+                c.channel_type,
+                c.link
+            FROM channel_users cu
+            JOIN channels c ON c.id = cu.channel_id
+            WHERE cu.user_id = $1
+              AND c.channel_type = 'group'
+            ORDER BY c.title ASC, c.id ASC
+            """,
+            user_id,
+        )
+        return [dict(row) for row in rows]

@@ -171,12 +171,6 @@
                     {{ userSort.direction === "asc" ? "^" : "v" }}
                   </span>
                 </th>
-                <th class="sortable" @click="setUserSort('id')">
-                  ID
-                  <span v-if="userSort.key === 'id'" class="sort-indicator">
-                    {{ userSort.direction === "asc" ? "^" : "v" }}
-                  </span>
-                </th>
                 <th class="sortable" @click="setUserSort('name')">
                   Имя
                   <span v-if="userSort.key === 'name'" class="sort-indicator">
@@ -201,7 +195,13 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="user in sortedUsers" :key="user.id">
+              <tr
+                v-for="user in sortedUsers"
+                :key="user.id"
+                class="clickable-row"
+                :class="{ active: selectedUserId === user.id }"
+                @click="openUserDetails(user.id)"
+              >
                 <td class="photo-cell">
                   <div class="avatar" :class="{ placeholder: !getUserAvatarUrl(user) }">
                     <img
@@ -212,19 +212,61 @@
                     />
                   </div>
                 </td>
-                <td>{{ user.id }}</td>
                 <td>{{ formatUserName(user) }}</td>
                 <td>{{ user.username || "-" }}</td>
                 <td>{{ user.messages_count }}</td>
               </tr>
               <tr v-if="userLoading">
-                <td colspan="5" class="muted">Загрузка...</td>
+                <td colspan="4" class="muted">Загрузка...</td>
               </tr>
               <tr v-if="!userLoading && users.length === 0">
-                <td colspan="5" class="muted">Нет данных</td>
+                <td colspan="4" class="muted">Нет данных</td>
               </tr>
             </tbody>
           </table>
+        </div>
+        <div v-if="selectedUserId" class="details">
+          <h3>Детали пользователя</h3>
+          <div v-if="userDetailsLoading" class="muted">Загрузка...</div>
+          <div v-else-if="userDetails" class="details-grid">
+            <div class="detail-row">
+              <span class="detail-label">ID</span>
+              <span>{{ userDetails.id }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Имя</span>
+              <span>{{ formatUserName(userDetails) }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Username</span>
+              <span>{{ userDetails.username || "-" }}</span>
+            </div>
+            <div v-if="userDetails.phone" class="detail-row">
+              <span class="detail-label">Телефон</span>
+              <span>{{ userDetails.phone }}</span>
+            </div>
+            <div v-if="userDetails.bio" class="detail-row">
+              <span class="detail-label">Описание</span>
+              <span>{{ userDetails.bio }}</span>
+            </div>
+          </div>
+          <div v-if="userDetails && userDetails.groups.length" class="group-list">
+            <h4>Группы</h4>
+            <ul>
+              <li v-for="group in userDetails.groups" :key="group.id">
+                <span class="group-title">{{ group.title }}</span>
+                <span class="group-meta">
+                  {{ group.username ? `@${group.username}` : group.id }}
+                </span>
+              </li>
+            </ul>
+          </div>
+          <div
+            v-else-if="userDetails && userDetails.groups.length === 0"
+            class="muted"
+          >
+            Нет групп
+          </div>
         </div>
       </section>
     </main>
@@ -248,6 +290,9 @@ const users = ref([]);
 const userOffset = ref(0);
 const userHasMore = ref(true);
 const userLoading = ref(false);
+const selectedUserId = ref(null);
+const userDetails = ref(null);
+const userDetailsLoading = ref(false);
 
 const newChannelValue = ref("");
 const channelsForSelect = ref([]);
@@ -366,7 +411,6 @@ const channelSorters = {
 
 const userSorters = {
   photo: (user) => getUserAvatarKey(user),
-  id: (user) => user.id,
   name: (user) => getUserNameValue(user),
   username: (user) => user.username || "",
   messages_count: (user) => user.messages_count ?? 0,
@@ -417,6 +461,8 @@ const fetchUsers = async (reset = false) => {
     users.value = [];
     userOffset.value = 0;
     userHasMore.value = true;
+    selectedUserId.value = null;
+    userDetails.value = null;
   }
   const { data } = await api.get("/users", {
     params: { offset: userOffset.value, limit: 30 },
@@ -428,6 +474,24 @@ const fetchUsers = async (reset = false) => {
     userOffset.value = data.next_offset;
   }
   userLoading.value = false;
+};
+
+const openUserDetails = async (userId) => {
+  if (userDetailsLoading.value) {
+    return;
+  }
+  if (selectedUserId.value === userId && userDetails.value) {
+    return;
+  }
+  selectedUserId.value = userId;
+  userDetails.value = null;
+  userDetailsLoading.value = true;
+  try {
+    const { data } = await api.get(`/users/${userId}`);
+    userDetails.value = data;
+  } finally {
+    userDetailsLoading.value = false;
+  }
 };
 
 const fetchChannelsForSelect = async () => {
@@ -686,6 +750,71 @@ th {
 .icon-button svg {
   width: 14px;
   height: 14px;
+}
+
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row.active {
+  background: #f0f6ff;
+}
+
+.details {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.details h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.details-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.detail-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.detail-label {
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.group-list h4 {
+  margin: 6px 0 4px;
+  font-size: 12px;
+}
+
+.group-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.group-list li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.group-title {
+  font-weight: 600;
+}
+
+.group-meta {
+  color: #6b7280;
+  font-size: 11px;
 }
 
 .muted {
