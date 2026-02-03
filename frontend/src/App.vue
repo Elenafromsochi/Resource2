@@ -114,7 +114,13 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="channel in sortedChannels" :key="channel.id">
+              <tr
+                v-for="channel in sortedChannels"
+                :key="channel.id"
+                class="clickable-row"
+                :class="{ active: selectedChannelDetailsId === channel.id }"
+                @click="openChannelDetails(channel.id)"
+              >
                 <td class="photo-cell">
                   <div
                     class="avatar"
@@ -137,7 +143,7 @@
                     class="icon-button"
                     type="button"
                     title="Удалить"
-                    @click="removeChannel(channel.id)"
+                    @click.stop="removeChannel(channel.id)"
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <path
@@ -156,6 +162,48 @@
               </tr>
             </tbody>
           </table>
+        </div>
+        <div v-if="selectedChannelDetailsId" class="details">
+          <h3>Детали канала</h3>
+          <div v-if="channelDetailsLoading" class="muted">Загрузка...</div>
+          <div v-else-if="channelDetails" class="details-grid">
+            <div class="detail-row">
+              <span class="detail-label">ID</span>
+              <span>{{ channelDetails.id }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Название</span>
+              <span>{{ channelDetails.title }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Username</span>
+              <span>{{ channelDetails.username || "-" }}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Тип</span>
+              <span>{{ channelDetails.channel_type }}</span>
+            </div>
+            <div v-if="channelDetails.link" class="detail-row">
+              <span class="detail-label">Ссылка</span>
+              <a :href="channelDetails.link" target="_blank" rel="noreferrer">
+                {{ channelDetails.link }}
+              </a>
+            </div>
+            <div
+              v-if="
+                channelDetails.members_count !== null &&
+                channelDetails.members_count !== undefined
+              "
+              class="detail-row"
+            >
+              <span class="detail-label">Участники</span>
+              <span>{{ channelDetails.members_count }}</span>
+            </div>
+            <div v-if="channelDetails.about" class="detail-row">
+              <span class="detail-label">Описание</span>
+              <span>{{ channelDetails.about }}</span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -285,6 +333,9 @@ const channels = ref([]);
 const channelOffset = ref(0);
 const channelHasMore = ref(true);
 const channelLoading = ref(false);
+const selectedChannelDetailsId = ref(null);
+const channelDetails = ref(null);
+const channelDetailsLoading = ref(false);
 
 const users = ref([]);
 const userOffset = ref(0);
@@ -439,6 +490,8 @@ const fetchChannels = async (reset = false) => {
     channels.value = [];
     channelOffset.value = 0;
     channelHasMore.value = true;
+    selectedChannelDetailsId.value = null;
+    channelDetails.value = null;
   }
   const { data } = await api.get("/channels", {
     params: { offset: channelOffset.value, limit: 30 },
@@ -514,6 +567,10 @@ const removeChannel = async (channelId) => {
   await api.delete(`/channels/${channelId}`);
   await fetchChannels(true);
   await fetchChannelsForSelect();
+  if (selectedChannelDetailsId.value === channelId) {
+    selectedChannelDetailsId.value = null;
+    channelDetails.value = null;
+  }
 };
 
 const importDialogs = async () => {
@@ -554,6 +611,24 @@ const onChannelsScroll = (event) => {
   const target = event.target;
   if (target.scrollTop + target.clientHeight >= target.scrollHeight - 40) {
     fetchChannels();
+  }
+};
+
+const openChannelDetails = async (channelId) => {
+  if (channelDetailsLoading.value) {
+    return;
+  }
+  if (selectedChannelDetailsId.value === channelId && channelDetails.value) {
+    return;
+  }
+  selectedChannelDetailsId.value = channelId;
+  channelDetails.value = null;
+  channelDetailsLoading.value = true;
+  try {
+    const { data } = await api.get(`/channels/${channelId}`);
+    channelDetails.value = data;
+  } finally {
+    channelDetailsLoading.value = false;
   }
 };
 

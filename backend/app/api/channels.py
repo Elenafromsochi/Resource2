@@ -4,6 +4,7 @@ from fastapi import Query
 from fastapi import Request
 
 from app.schemas import ChannelCreate
+from app.schemas import ChannelDetailsResponse
 from app.schemas import ChannelListResponse
 from app.schemas import ChannelOut
 
@@ -43,6 +44,20 @@ async def list_channels(
 @router.get('/all', response_model=list[ChannelOut])
 async def list_all_channels(request: Request):
     return await request.app.state.storage.channels.list_all()
+
+
+@router.get('/{channel_id}', response_model=ChannelDetailsResponse)
+async def get_channel_details(channel_id: int, request: Request):
+    entity, about, members_count = await request.app.state.mediator.get_channel_details(
+        channel_id
+    )
+    channel_data = request.app.state.mediator.format_channel_details(
+        entity,
+        about,
+        members_count,
+    )
+    saved = await request.app.state.storage.channels.upsert(channel_data)
+    return saved
 
 
 @router.post('/import-dialogs')

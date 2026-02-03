@@ -4,6 +4,8 @@ import re
 from datetime import datetime
 from typing import Any
 
+from telethon.tl.functions.channels import GetFullChannelRequest
+from telethon.tl.functions.messages import GetFullChatRequest
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.tl.types import Channel
 from telethon.tl.types import Chat
@@ -136,6 +138,26 @@ class Mediator:
             about = None
         return user, about
 
+    async def get_channel_details(
+        self,
+        channel_id: int,
+    ) -> tuple[Channel | Chat, str | None, int | None]:
+        entity = await self.telegram.client.get_entity(channel_id)
+        about = None
+        members_count = None
+        try:
+            if isinstance(entity, Channel):
+                full = await self.telegram.client(GetFullChannelRequest(entity))
+            else:
+                full = await self.telegram.client(GetFullChatRequest(entity.id))
+            full_chat = full.full_chat
+            about = getattr(full_chat, 'about', None)
+            members_count = getattr(full_chat, 'participants_count', None)
+        except Exception:
+            about = None
+            members_count = None
+        return entity, about, members_count
+
     def format_user(self, entity: User, about: str | None) -> dict[str, Any]:
         return {
             'id': entity.id,
@@ -157,3 +179,18 @@ class Mediator:
             'photo': str(entity.photo) if entity.photo else None,
             'phone': getattr(entity, 'phone', None),
         }
+
+    def format_channel_details(
+        self,
+        entity: Channel | Chat,
+        about: str | None,
+        members_count: int | None,
+    ) -> dict[str, Any]:
+        data = self.format_channel(entity)
+        data.update(
+            {
+                'about': about,
+                'members_count': members_count,
+            }
+        )
+        return data
