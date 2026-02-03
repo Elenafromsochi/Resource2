@@ -14,6 +14,11 @@ from telethon.tl.types import Chat
 from telethon.tl.types import User
 
 from .deepseek import DeepSeek
+from .exceptions import ChannelEntityTypeError
+from .exceptions import ChannelHasNoUsernameError
+from .exceptions import ChannelNotFoundError
+from .exceptions import EmptyChannelIdentifierError
+from .exceptions import UserEntityTypeError
 from .storage import Storage
 from .telegram import Telegram
 
@@ -56,7 +61,7 @@ class Mediator:
     async def get_channel_entity(self, channel_id: int) -> Channel | Chat:
         channel = await self.storage.channels.get(channel_id)
         if not channel:
-            raise ValueError('Channel is not found')
+            raise ChannelNotFoundError()
         entity = None
         if channel_id > 0:
             peer_id = self.make_channel_peer_id(channel_id)
@@ -67,19 +72,19 @@ class Mediator:
             return entity
         username = channel.get('username')
         if not username:
-            raise ValueError('Channel has no username')
+            raise ChannelHasNoUsernameError()
         identifier = self.normalize_identifier(username)
         if identifier is None:
-            raise ValueError('Channel has no username')
+            raise ChannelHasNoUsernameError()
         entity = await self.telegram.client.get_entity(identifier)
         if not isinstance(entity, (Channel, Chat)):
-            raise ValueError('Entity is not a channel or group')
+            raise ChannelEntityTypeError()
         return entity
 
     async def get_channel_entity_by_identifier(self, value: str) -> Channel | Chat:
         normalized = self.normalize_identifier(value)
         if normalized is None:
-            raise ValueError('Empty channel identifier')
+            raise EmptyChannelIdentifierError()
         entity = None
         if isinstance(normalized, int):
             if normalized > 0:
@@ -90,7 +95,7 @@ class Mediator:
         else:
             entity = await self.safe_get_entity(normalized)
         if not isinstance(entity, (Channel, Chat)):
-            raise ValueError('Entity is not a channel or group')
+            raise ChannelEntityTypeError()
         return entity
 
     @async_cache
@@ -104,13 +109,13 @@ class Mediator:
         user_data = await self.storage.users.get(user_id)
         username = user_data.get('username') if user_data else None
         if not username:
-            raise ValueError('Entity is not a user')
+            raise UserEntityTypeError()
         identifier = self.normalize_identifier(username)
         if identifier is None:
-            raise ValueError('Entity is not a user')
+            raise UserEntityTypeError()
         entity = await self.telegram.client.get_entity(identifier)
         if not isinstance(entity, User):
-            raise ValueError('Entity is not a user')
+            raise UserEntityTypeError()
         return entity
 
     async def import_dialogs(self) -> list[dict[str, Any]]:
