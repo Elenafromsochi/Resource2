@@ -8,6 +8,7 @@
 
 Обязательные переменные:
 
+- `POSTGRES_URL`
 - `POSTGRES_DB`
 - `POSTGRES_USER`
 - `POSTGRES_PASSWORD`

@@ -7,42 +7,38 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "5432:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
+    ports:
+      - 5432:5432
 
   backend:
     build: ./backend
     environment:
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_URL: ${POSTGRES_URL}
       TELEGRAM_API_ID: ${TELEGRAM_API_ID}
       TELEGRAM_API_HASH: ${TELEGRAM_API_HASH}
       TELETHON_SESSION: ${TELETHON_SESSION}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+    ports:
+      - 8000:8000
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8000:8000"
 
   frontend:
     build: ./frontend
     environment:
       VITE_API_URL: http://localhost:8000/api
+    ports:
+      - 5173:5173
     depends_on:
       - backend
-    ports:
-      - "5173:5173"
 
 volumes:
-  db_data:
+  postgres-data:

@@ -15,7 +15,7 @@ class Storage:
 
     async def init(self):
         self.pool = await asyncpg.create_pool(
-            dsn=config.DATABASE_DSN,
+            dsn=config.POSTGRES_URL,
             min_size=config.DB_POOL_MIN,
             max_size=config.DB_POOL_MAX,
         )
