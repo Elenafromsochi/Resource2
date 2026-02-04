@@ -21,12 +21,6 @@ async def analyze_users(payload: AnalyzeRequest, request: Request):
     return result
 
 
-@router.post('/refresh-cache')
-async def refresh_cache(request: Request):
-    cleared = request.app.state.mediator.clear_cache()
-    return {'cleared': cleared}
-
-
 @router.get('', response_model=UserListResponse)
 async def list_users(
     request: Request,
