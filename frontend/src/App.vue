@@ -850,7 +850,7 @@ const getUsersList = async () => {
 const refreshCache = async () => {
   cacheRefreshing.value = true;
   try {
-    await api.post("/users/refresh-cache");
+    await api.post("/channels/refresh-messages");
   } finally {
     cacheRefreshing.value = false;
   }
