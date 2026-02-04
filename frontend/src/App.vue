@@ -123,6 +123,58 @@
             </li>
           </ul>
         </div>
+        <div v-if="cacheRefreshResult" class="cache-refresh">
+          <div class="cache-refresh-header">
+            <h3>Результат обновления кэша</h3>
+            <span class="cache-refresh-summary">
+              Каналов: {{ cacheRefreshResult.channels_processed }},
+              добавлено: {{ cacheRefreshResult.messages_upserted }},
+              обновлено: {{ cacheRefreshResult.messages_updated }}
+            </span>
+          </div>
+          <div class="table-container cache-refresh-table">
+            <table class="compact-table">
+              <thead>
+                <tr>
+                  <th>Канал</th>
+                  <th>Добавлено</th>
+                  <th>Обновлено</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="entry in cacheRefreshChannels" :key="entry.channel_id">
+                  <td>
+                    <div class="cache-channel-title">
+                      {{ formatCacheChannelLabel(entry) }}
+                    </div>
+                    <div class="cache-channel-meta">
+                      ID: {{ entry.channel_id }}
+                      <span v-if="entry.channel_username">
+                        · @{{ entry.channel_username }}
+                      </span>
+                    </div>
+                  </td>
+                  <td>{{ entry.messages_upserted }}</td>
+                  <td>{{ entry.messages_updated }}</td>
+                </tr>
+                <tr v-if="cacheRefreshChannels.length === 0">
+                  <td colspan="3" class="muted">Нет данных</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div
+            v-if="cacheRefreshResult.errors && cacheRefreshResult.errors.length"
+            class="analysis-errors"
+          >
+            <h3>Ошибки обновления кэша</h3>
+            <ul>
+              <li v-for="(error, index) in cacheRefreshResult.errors" :key="index">
+                {{ error }}
+              </li>
+            </ul>
+          </div>
+        </div>
       </section>
 
       <section class="block">
@@ -489,6 +541,7 @@ const rangeEndDays = ref(analysisRangeMaxDays);
 const userListLoading = ref(false);
 const cacheRefreshing = ref(false);
 const analysisResult = ref(null);
+const cacheRefreshResult = ref(null);
 
 const channelSort = ref({ key: null, direction: "asc" });
 const userSort = ref({ key: null, direction: "asc" });
@@ -540,6 +593,16 @@ const formatUserChannelMessages = (user) => {
     .map((entry) => String(entry.messages_count ?? 0))
     .join(", ");
   return `${total} (${perChannel})`;
+};
+
+const formatCacheChannelLabel = (entry) => {
+  if (entry?.channel_title) {
+    return entry.channel_title;
+  }
+  if (entry?.channel_id !== null && entry?.channel_id !== undefined) {
+    return `Канал ${entry.channel_id}`;
+  }
+  return "Канал";
 };
 
 const formatDaysAgo = (days) =>
@@ -693,6 +756,22 @@ const sortedChannelsForSelect = computed(() => {
   return [...channelsForSelect.value].sort((a, b) =>
     collator.compare(a.title || "", b.title || ""),
   );
+});
+
+const cacheRefreshChannels = computed(() => {
+  const channels = cacheRefreshResult.value?.channels;
+  if (!Array.isArray(channels)) {
+    return [];
+  }
+  return [...channels].sort((a, b) => {
+    const titleA = a.channel_title || "";
+    const titleB = b.channel_title || "";
+    const titleCompare = collator.compare(titleA, titleB);
+    if (titleCompare !== 0) {
+      return titleCompare;
+    }
+    return (a.channel_id ?? 0) - (b.channel_id ?? 0);
+  });
 });
 
 const fetchChannels = async (reset = false) => {
@@ -849,6 +928,7 @@ const getUsersList = async () => {
 
 const refreshCache = async () => {
   cacheRefreshing.value = true;
+  cacheRefreshResult.value = null;
   const dateFrom = getUtcStartDate(rangeEndDays.value).toISOString();
   const dateTo = getUtcEndDate(rangeStartDays.value).toISOString();
   const payload = {
@@ -858,7 +938,8 @@ const refreshCache = async () => {
       selectedChannelIds.value.length > 0 ? selectedChannelIds.value : null,
   };
   try {
-    await api.post("/channels/refresh-messages", payload);
+    const { data } = await api.post("/channels/refresh-messages", payload);
+    cacheRefreshResult.value = data;
   } finally {
     cacheRefreshing.value = false;
   }
@@ -1204,6 +1285,42 @@ button:disabled {
   padding-left: 16px;
   display: grid;
   gap: 4px;
+}
+
+.cache-refresh {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cache-refresh-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.cache-refresh-header h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.cache-refresh-summary {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.cache-refresh-table {
+  max-height: 240px;
+}
+
+.cache-channel-title {
+  font-weight: 600;
+}
+
+.cache-channel-meta {
+  font-size: 10px;
+  color: #6b7280;
 }
 
 table {
