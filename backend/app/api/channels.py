@@ -6,6 +6,7 @@ from app.schemas import ChannelCreate
 from app.schemas import ChannelDetailsResponse
 from app.schemas import ChannelListResponse
 from app.schemas import ChannelOut
+from app.schemas import RefreshMessagesResponse
 
 
 router = APIRouter(prefix='/channels')
@@ -62,3 +63,8 @@ async def get_channel_details(channel_id: int, request: Request):
 async def import_dialogs(request: Request):
     saved = await request.app.state.mediator.import_dialogs()
     return {'imported': len(saved)}
+
+
+@router.post('/refresh-messages', response_model=RefreshMessagesResponse)
+async def refresh_messages(request: Request):
+    return await request.app.state.mediator.refresh_messages_cache()

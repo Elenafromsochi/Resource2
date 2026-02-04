@@ -57,14 +57,6 @@ class Mediator:
         self.deepseek = deepseek
         self.storage = storage
 
-    def clear_cache(self) -> int:
-        cleared = 0
-        for key in list(self.__dict__.keys()):
-            if key.endswith('_cache'):
-                setattr(self, key, {})
-                cleared += 1
-        return cleared
-
     @async_cache
     async def get_channel_entity(self, channel_id: int) -> Channel | Chat:
         channel = await self.storage.channels.get(channel_id)
@@ -136,6 +128,50 @@ class Mediator:
                 saved.append(await self.storage.channels.upsert(channel))
         return saved
 
+    async def refresh_messages_cache(self) -> dict[str, Any]:
+        channels = await self.storage.channels.list_all()
+        errors: list[str] = []
+        message_batch_size = 200
+        channels_processed = 0
+        messages_processed = 0
+        messages_upserted = 0
+        messages_updated = 0
+        for channel in channels:
+            channel_id = channel.get('id')
+            try:
+                entity = await self.resolve_channel_entity(channel)
+            except Exception as exc:
+                errors.append(f'channel {channel_id}: {exc}')
+                continue
+            channels_processed += 1
+            try:
+                message_batch: list[dict[str, Any]] = []
+                async for message in self.telegram.client.iter_messages(entity):
+                    message_data = message.to_dict()
+                    if not message_data:
+                        continue
+                    message_batch.append(message_data)
+                    if len(message_batch) >= message_batch_size:
+                        stats = await self.storage.messages.upsert_many(message_batch)
+                        messages_processed += stats['processed']
+                        messages_upserted += stats['upserted']
+                        messages_updated += stats['modified']
+                        message_batch.clear()
+                if message_batch:
+                    stats = await self.storage.messages.upsert_many(message_batch)
+                    messages_processed += stats['processed']
+                    messages_upserted += stats['upserted']
+                    messages_updated += stats['modified']
+            except Exception as exc:
+                errors.append(f'channel {channel_id}: {exc}')
+        return {
+            'channels_processed': channels_processed,
+            'messages_processed': messages_processed,
+            'messages_upserted': messages_upserted,
+            'messages_updated': messages_updated,
+            'errors': errors,
+        }
+
     async def analyze_activity(
         self,
         date_from: datetime,
@@ -166,7 +202,7 @@ class Mediator:
                         break
                     message_batch.append(message.to_dict())
                     if len(message_batch) >= message_batch_size:
-                        await self.storage.messages.insert_many(message_batch)
+                        await self.storage.messages.upsert_many(message_batch)
                         message_batch.clear()
                     sender_id = message.sender_id
                     if not sender_id:
@@ -180,7 +216,7 @@ class Mediator:
                         stats['channels'].get(channel['id'], 0) + 1
                     )
                 if message_batch:
-                    await self.storage.messages.insert_many(message_batch)
+                    await self.storage.messages.upsert_many(message_batch)
             except Exception as exc:
                 errors.append(f'channel {channel_id}: {exc}')
                 continue

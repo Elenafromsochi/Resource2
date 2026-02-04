@@ -43,6 +43,14 @@ class AnalyzeResponse(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
+class RefreshMessagesResponse(BaseModel):
+    channels_processed: int
+    messages_processed: int
+    messages_upserted: int
+    messages_updated: int
+    errors: list[str] = Field(default_factory=list)
+
+
 class UserChannelMessagesOut(BaseModel):
     channel_id: int
     messages_count: int
