@@ -1,3 +1,5 @@
+import asyncio
+
 from .base import BaseMongoRepository
 
 
@@ -11,5 +13,5 @@ class MessagesRepository(BaseMongoRepository):
     async def insert_many(self, messages: list[dict]) -> int:
         if not messages:
             return 0
-        result = await self.collection.insert_many(messages)
+        result = await asyncio.to_thread(self.collection.insert_many, messages)
         return len(result.inserted_ids)
