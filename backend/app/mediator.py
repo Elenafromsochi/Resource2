@@ -128,8 +128,16 @@ class Mediator:
                 saved.append(await self.storage.channels.upsert(channel))
         return saved
 
-    async def refresh_messages_cache(self) -> dict[str, Any]:
-        channels = await self.storage.channels.list_all()
+    async def refresh_messages_cache(
+        self,
+        date_from: datetime,
+        date_to: datetime,
+        channel_ids: list[int] | None = None,
+    ) -> dict[str, Any]:
+        if channel_ids:
+            channels = await self.storage.channels.get_by_ids(channel_ids)
+        else:
+            channels = await self.storage.channels.list_all()
         errors: list[str] = []
         message_batch_size = 200
         channels_processed = 0
@@ -146,7 +154,12 @@ class Mediator:
             channels_processed += 1
             try:
                 message_batch: list[dict[str, Any]] = []
-                async for message in self.telegram.client.iter_messages(entity):
+                async for message in self.telegram.client.iter_messages(
+                    entity,
+                    offset_date=date_to,
+                ):
+                    if message.date < date_from:
+                        break
                     message_data = message.to_dict()
                     if not message_data:
                         continue

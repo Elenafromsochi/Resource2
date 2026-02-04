@@ -849,8 +849,16 @@ const getUsersList = async () => {
 
 const refreshCache = async () => {
   cacheRefreshing.value = true;
+  const dateFrom = getUtcStartDate(rangeEndDays.value).toISOString();
+  const dateTo = getUtcEndDate(rangeStartDays.value).toISOString();
+  const payload = {
+    date_from: dateFrom,
+    date_to: dateTo,
+    channel_ids:
+      selectedChannelIds.value.length > 0 ? selectedChannelIds.value : null,
+  };
   try {
-    await api.post("/channels/refresh-messages");
+    await api.post("/channels/refresh-messages", payload);
   } finally {
     cacheRefreshing.value = false;
   }
