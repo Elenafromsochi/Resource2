@@ -41,9 +41,20 @@
               <span class="range-scale">0 — {{ analysisRangeMaxDays }} дн.</span>
             </div>
           </div>
-          <button :disabled="userListLoading" @click="getUsersList">
-            Получить список пользователей
-          </button>
+          <div class="analysis-actions">
+            <button
+              :disabled="cacheRefreshing || userListLoading"
+              @click="refreshCache"
+            >
+              Обновить кэш
+            </button>
+            <button
+              :disabled="cacheRefreshing || userListLoading"
+              @click="getUsersList"
+            >
+              Получить список пользователей
+            </button>
+          </div>
         </div>
         <div class="table-container analysis-table">
           <table class="compact-table">
@@ -476,6 +487,7 @@ const analysisRangeMaxDays = ANALYSIS_RANGE_MAX_DAYS;
 const rangeStartDays = ref(0);
 const rangeEndDays = ref(analysisRangeMaxDays);
 const userListLoading = ref(false);
+const cacheRefreshing = ref(false);
 const analysisResult = ref(null);
 
 const channelSort = ref({ key: null, direction: "asc" });
@@ -835,6 +847,15 @@ const getUsersList = async () => {
   }
 };
 
+const refreshCache = async () => {
+  cacheRefreshing.value = true;
+  try {
+    await api.post("/users/refresh-cache");
+  } finally {
+    cacheRefreshing.value = false;
+  }
+};
+
 const SEARCH_DEBOUNCE_MS = 300;
 let channelSearchTimeout;
 let userSearchTimeout;
@@ -1002,9 +1023,12 @@ onMounted(async () => {
   justify-content: space-between;
 }
 
-.analysis-controls button {
-  align-self: flex-start;
+.analysis-actions {
   margin-left: auto;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .range-control {
