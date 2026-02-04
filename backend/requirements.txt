@@ -1,6 +1,7 @@
 asyncpg
 colorlog
 fastapi
+motor
 openai
 telethon
 uvicorn[standard]

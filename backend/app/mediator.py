@@ -57,6 +57,14 @@ class Mediator:
         self.deepseek = deepseek
         self.storage = storage
 
+    def clear_cache(self) -> int:
+        cleared = 0
+        for key in list(self.__dict__.keys()):
+            if key.endswith('_cache'):
+                setattr(self, key, {})
+                cleared += 1
+        return cleared
+
     @async_cache
     async def get_channel_entity(self, channel_id: int) -> Channel | Chat:
         channel = await self.storage.channels.get(channel_id)
@@ -140,6 +148,7 @@ class Mediator:
             channels = await self.storage.channels.list_all()
         user_stats: dict[int, dict[str, Any]] = {}
         errors: list[str] = []
+        message_batch_size = 200
         for channel in channels:
             channel_id = channel.get('id')
             try:
@@ -148,12 +157,17 @@ class Mediator:
                 errors.append(f'channel {channel_id}: {exc}')
                 continue
             try:
+                message_batch: list[dict[str, Any]] = []
                 async for message in self.telegram.client.iter_messages(
                     entity,
                     offset_date=date_to,
                 ):
                     if message.date < date_from:
                         break
+                    message_batch.append(message.to_dict())
+                    if len(message_batch) >= message_batch_size:
+                        await self.storage.messages.insert_many(message_batch)
+                        message_batch.clear()
                     sender_id = message.sender_id
                     if not sender_id:
                         continue
@@ -165,6 +179,8 @@ class Mediator:
                     stats['channels'][channel['id']] = (
                         stats['channels'].get(channel['id'], 0) + 1
                     )
+                if message_batch:
+                    await self.storage.messages.insert_many(message_batch)
             except Exception as exc:
                 errors.append(f'channel {channel_id}: {exc}')
                 continue
