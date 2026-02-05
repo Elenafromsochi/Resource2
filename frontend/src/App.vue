@@ -447,10 +447,10 @@
                     {{ userSort.direction === "asc" ? "^" : "v" }}
                   </span>
                 </th>
-                <th class="sortable" @click="setUserSort('messages_count')">
+                <th class="sortable" @click="setUserSort('messages_total')">
                   Сообщений
                   <span
-                    v-if="userSort.key === 'messages_count'"
+                    v-if="userSort.key === 'messages_total'"
                     class="sort-indicator"
                   >
                     {{ userSort.direction === "asc" ? "^" : "v" }}
@@ -612,13 +612,13 @@ const formatUserName = (user) => {
 };
 
 const getUserTotalMessages = (user) => {
-  if (user?.channel_messages && user.channel_messages.length > 0) {
-    return user.channel_messages.reduce(
-      (sum, entry) => sum + (entry?.messages_count ?? 0),
-      0,
-    );
+  if (!user?.channel_messages || user.channel_messages.length === 0) {
+    return 0;
   }
-  return user?.messages_count ?? 0;
+  return user.channel_messages.reduce(
+    (sum, entry) => sum + (entry?.messages_count ?? 0),
+    0,
+  );
 };
 
 const formatUserChannelMessages = (user) => {
@@ -781,7 +781,7 @@ const userSorters = {
   photo: (user) => getUserAvatarKey(user),
   name: (user) => getUserNameValue(user),
   username: (user) => user.username || "",
-  messages_count: (user) => getUserTotalMessages(user),
+  messages_total: (user) => getUserTotalMessages(user),
 };
 
 const sortedChannels = computed(() =>

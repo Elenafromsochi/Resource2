@@ -267,7 +267,6 @@ class Mediator:
             try:
                 user_entity, about = await self.get_user_details(user_id)
                 user = self.format_user(user_entity, about)
-                user['messages_count'] = stats['total']
                 await self.storage.users.upsert(user)
                 await self.storage.users.replace_user_channels(
                     user_id,
@@ -283,7 +282,7 @@ class Mediator:
         stats = await self.storage.messages.aggregate_user_message_stats()
         channels = await self.storage.channels.list_all()
         channel_ids = {channel['id'] for channel in channels}
-        user_rows: list[tuple[int, int]] = []
+        user_ids: list[int] = []
         channel_rows: list[tuple[int, int, int]] = []
         messages_total = 0
         unknown_channel_ids: set[int] = set()
@@ -301,7 +300,7 @@ class Mediator:
                 total = int(total)
             except (TypeError, ValueError):
                 total = 0
-            user_rows.append((user_id, total))
+            user_ids.append(user_id)
             messages_total += total
             for channel in entry.get('channels', []) or []:
                 channel_id = channel.get('channel_id')
@@ -321,11 +320,7 @@ class Mediator:
                     count = 0
                 channel_rows.append((channel_id, user_id, count))
 
-        keep_user_ids = [row[0] for row in user_rows]
-        await self.storage.users.reset_messages_counts(
-            keep_user_ids if keep_user_ids else None,
-        )
-        await self.storage.users.upsert_message_counts(user_rows)
+        await self.storage.users.ensure_users_exist(user_ids)
         await self.storage.users.replace_all_channel_users(channel_rows)
 
         errors: list[str] = []
@@ -338,7 +333,7 @@ class Mediator:
         channels_with_messages = len({row[0] for row in channel_rows})
 
         return {
-            'users_updated': len(user_rows),
+            'users_updated': len(user_ids),
             'channels_with_messages': channels_with_messages,
             'messages_total': messages_total,
             'errors': errors,
@@ -427,7 +422,6 @@ class Mediator:
             'last_name': entity.last_name,
             'bio': about,
             'photo': str(entity.photo) if entity.photo else None,
-            'messages_count': 0,
         }
 
     def format_user_details(self, entity: User, about: str | None) -> dict[str, Any]:
