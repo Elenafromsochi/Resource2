@@ -4,6 +4,7 @@ from fastapi import Request
 
 from app.schemas import AnalyzeRequest
 from app.schemas import AnalyzeResponse
+from app.schemas import RefreshUserStatsResponse
 from app.schemas import UserDetailsResponse
 from app.schemas import UserListResponse
 
@@ -49,3 +50,8 @@ async def get_user_details(user_id: int, request: Request):
     )
     groups = await request.app.state.storage.users.list_user_groups(user_id)
     return {**user_data, 'groups': groups}
+
+
+@router.post('/refresh-message-stats', response_model=RefreshUserStatsResponse)
+async def refresh_message_stats(request: Request):
+    return await request.app.state.mediator.refresh_user_message_stats()
