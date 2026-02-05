@@ -131,6 +131,14 @@
               добавлено: {{ cacheRefreshResult.messages_upserted }},
               обновлено: {{ cacheRefreshResult.messages_updated }}
             </span>
+            <button
+              type="button"
+              class="cache-refresh-close"
+              aria-label="Скрыть результат обновления кэша"
+              @click="dismissCacheRefreshResult"
+            >
+              Скрыть
+            </button>
           </div>
           <div class="table-container cache-refresh-table">
             <table class="compact-table">
@@ -945,6 +953,10 @@ const refreshCache = async () => {
   }
 };
 
+const dismissCacheRefreshResult = () => {
+  cacheRefreshResult.value = null;
+};
+
 const SEARCH_DEBOUNCE_MS = 300;
 let channelSearchTimeout;
 let userSearchTimeout;
@@ -1296,7 +1308,7 @@ button:disabled {
 .cache-refresh-header {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
 }
 
@@ -1308,6 +1320,21 @@ button:disabled {
 .cache-refresh-summary {
   font-size: 12px;
   color: #6b7280;
+}
+
+.cache-refresh-close {
+  margin-left: auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid #cbd2d9;
+  background: #ffffff;
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.cache-refresh-close:hover {
+  background: #f1f4f9;
+  color: #1f2933;
 }
 
 .cache-refresh-table {
