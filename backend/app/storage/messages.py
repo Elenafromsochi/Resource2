@@ -32,12 +32,6 @@ class MessagesRepository(BaseMongoRepository):
         filter_doc['peer_id'] = peer_id
         return filter_doc
 
-    async def insert_many(self, messages: list[dict]) -> int:
-        if not messages:
-            return 0
-        result = await asyncio.to_thread(self.collection.insert_many, messages)
-        return len(result.inserted_ids)
-
     async def upsert_many(self, messages: list[dict]) -> dict[str, int]:
         if not messages:
             return {'processed': 0, 'upserted': 0, 'modified': 0, 'skipped': 0}
