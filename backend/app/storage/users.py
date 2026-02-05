@@ -188,15 +188,6 @@ class UsersRepository(BaseRepository):
         )
         return dict(row) if row else None
 
-    async def get_by_ids(self, user_ids):
-        if not user_ids:
-            return []
-        rows = await self.pool.fetch(
-            'SELECT * FROM users WHERE id = ANY($1::bigint[])',
-            user_ids,
-        )
-        return [dict(row) for row in rows]
-
     async def list_user_groups(self, user_id):
         rows = await self.pool.fetch(
             """
