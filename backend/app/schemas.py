@@ -85,7 +85,6 @@ class UserOut(BaseModel):
     last_name: str | None
     bio: str | None
     photo: str | None
-    messages_count: int
     channel_messages: list[UserChannelMessagesOut] = Field(default_factory=list)
     updated_at: datetime | None = None
 

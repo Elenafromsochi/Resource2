@@ -15,7 +15,6 @@ CREATE TABLE IF NOT EXISTS users (
     last_name TEXT,
     bio TEXT,
     photo TEXT,
-    messages_count INTEGER NOT NULL DEFAULT 0,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -26,5 +25,3 @@ CREATE TABLE IF NOT EXISTS channel_users (
     PRIMARY KEY (channel_id, user_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_users_activity
-    ON users (messages_count DESC, updated_at DESC);

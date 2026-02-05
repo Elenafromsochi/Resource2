@@ -40,10 +40,9 @@ class UsersRepository(BaseRepository):
                 last_name,
                 bio,
                 photo,
-                messages_count,
                 updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
             ON CONFLICT (id)
             DO UPDATE SET
                 username = EXCLUDED.username,
@@ -51,7 +50,6 @@ class UsersRepository(BaseRepository):
                 last_name = EXCLUDED.last_name,
                 bio = EXCLUDED.bio,
                 photo = EXCLUDED.photo,
-                messages_count = EXCLUDED.messages_count,
                 updated_at = NOW()
             RETURNING *
             """,
@@ -61,7 +59,6 @@ class UsersRepository(BaseRepository):
             user.get('last_name'),
             user.get('bio'),
             user.get('photo'),
-            user.get('messages_count', 0),
         )
         return dict(row) if row else None
 
@@ -75,10 +72,9 @@ class UsersRepository(BaseRepository):
                 last_name,
                 bio,
                 photo,
-                messages_count,
                 updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
             ON CONFLICT (id)
             DO UPDATE SET
                 username = EXCLUDED.username,
@@ -95,7 +91,6 @@ class UsersRepository(BaseRepository):
             user.get('last_name'),
             user.get('bio'),
             user.get('photo'),
-            user.get('messages_count', 0),
         )
         return dict(row) if row else None
 
@@ -132,34 +127,19 @@ class UsersRepository(BaseRepository):
                         channel_rows,
                     )
 
-    async def upsert_message_counts(self, user_rows):
-        if not user_rows:
+    async def ensure_users_exist(self, user_ids):
+        if not user_ids:
             return
         async with self.pool.acquire() as conn:
             await conn.executemany(
                 """
-                INSERT INTO users (id, messages_count, updated_at)
-                VALUES ($1, $2, NOW())
+                INSERT INTO users (id, updated_at)
+                VALUES ($1, NOW())
                 ON CONFLICT (id)
-                DO UPDATE SET
-                    messages_count = EXCLUDED.messages_count,
-                    updated_at = NOW()
+                DO UPDATE SET updated_at = NOW()
                 """,
-                user_rows,
+                [(user_id,) for user_id in user_ids],
             )
-
-    async def reset_messages_counts(self, keep_user_ids: list[int] | None = None):
-        if keep_user_ids:
-            await self.pool.execute(
-                """
-                UPDATE users
-                SET messages_count = 0
-                WHERE id <> ALL($1::bigint[])
-                """,
-                keep_user_ids,
-            )
-            return
-        await self.pool.execute('UPDATE users SET messages_count = 0')
 
     async def list(self, offset, limit, search: str | None = None):
         if search:
@@ -180,7 +160,7 @@ class UsersRepository(BaseRepository):
                        OR COALESCE(last_name, '') ILIKE $2
                        OR CONCAT_WS(' ', first_name, last_name) ILIKE $2
                        OR CONCAT_WS(' ', last_name, first_name) ILIKE $2
-                    ORDER BY messages_count DESC, updated_at DESC, id DESC
+                    ORDER BY updated_at DESC, id DESC
                     OFFSET $3 LIMIT $4
                     """,
                     id_pattern,
@@ -193,7 +173,7 @@ class UsersRepository(BaseRepository):
             """
             SELECT *
             FROM users
-            ORDER BY messages_count DESC, updated_at DESC, id DESC
+            ORDER BY updated_at DESC, id DESC
             OFFSET $1 LIMIT $2
             """,
             offset,
