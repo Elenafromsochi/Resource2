@@ -66,6 +66,13 @@ class RefreshMessagesResponse(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
+class RefreshUserStatsResponse(BaseModel):
+    users_updated: int
+    channels_with_messages: int
+    messages_total: int
+    errors: list[str] = Field(default_factory=list)
+
+
 class UserChannelMessagesOut(BaseModel):
     channel_id: int
     messages_count: int

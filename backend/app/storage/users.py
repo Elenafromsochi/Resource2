@@ -117,6 +117,50 @@ class UsersRepository(BaseRepository):
                 values,
             )
 
+    async def replace_all_channel_users(self, channel_rows):
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute('DELETE FROM channel_users')
+                if channel_rows:
+                    await conn.executemany(
+                        """
+                        INSERT INTO channel_users (channel_id, user_id, messages_count)
+                        VALUES ($1, $2, $3)
+                        ON CONFLICT (channel_id, user_id)
+                        DO UPDATE SET messages_count = EXCLUDED.messages_count
+                        """,
+                        channel_rows,
+                    )
+
+    async def upsert_message_counts(self, user_rows):
+        if not user_rows:
+            return
+        async with self.pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO users (id, messages_count, updated_at)
+                VALUES ($1, $2, NOW())
+                ON CONFLICT (id)
+                DO UPDATE SET
+                    messages_count = EXCLUDED.messages_count,
+                    updated_at = NOW()
+                """,
+                user_rows,
+            )
+
+    async def reset_messages_counts(self, keep_user_ids: list[int] | None = None):
+        if keep_user_ids:
+            await self.pool.execute(
+                """
+                UPDATE users
+                SET messages_count = 0
+                WHERE id <> ALL($1::bigint[])
+                """,
+                keep_user_ids,
+            )
+            return
+        await self.pool.execute('UPDATE users SET messages_count = 0')
+
     async def list(self, offset, limit, search: str | None = None):
         if search:
             search_value = search.strip()

@@ -43,16 +43,22 @@
           </div>
           <div class="analysis-actions">
             <button
-              :disabled="cacheRefreshing || userListLoading"
+              :disabled="cacheRefreshing || userListLoading || userStatsRefreshing"
               @click="refreshCache"
             >
               Обновить кэш
             </button>
             <button
-              :disabled="cacheRefreshing || userListLoading"
+              :disabled="cacheRefreshing || userListLoading || userStatsRefreshing"
               @click="getUsersList"
             >
               Получить список пользователей
+            </button>
+            <button
+              :disabled="cacheRefreshing || userListLoading || userStatsRefreshing"
+              @click="refreshUserStats"
+            >
+              Обновить статистику сообщений
             </button>
           </div>
         </div>
@@ -178,6 +184,30 @@
             <h3>Ошибки обновления кэша</h3>
             <ul>
               <li v-for="(error, index) in cacheRefreshResult.errors" :key="index">
+                {{ error }}
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div v-if="userStatsRefreshResult" class="user-stats-refresh">
+          <div class="user-stats-header">
+            <h3>Статистика сообщений обновлена</h3>
+            <span class="user-stats-summary">
+              Пользователей: {{ userStatsRefreshResult.users_updated }},
+              каналов: {{ userStatsRefreshResult.channels_with_messages }},
+              сообщений: {{ userStatsRefreshResult.messages_total }}
+            </span>
+          </div>
+          <div
+            v-if="
+              userStatsRefreshResult.errors &&
+              userStatsRefreshResult.errors.length
+            "
+            class="analysis-errors"
+          >
+            <h3>Ошибки обновления статистики</h3>
+            <ul>
+              <li v-for="(error, index) in userStatsRefreshResult.errors" :key="index">
                 {{ error }}
               </li>
             </ul>
@@ -548,8 +578,10 @@ const rangeStartDays = ref(0);
 const rangeEndDays = ref(analysisRangeMaxDays);
 const userListLoading = ref(false);
 const cacheRefreshing = ref(false);
+const userStatsRefreshing = ref(false);
 const analysisResult = ref(null);
 const cacheRefreshResult = ref(null);
+const userStatsRefreshResult = ref(null);
 
 const channelSort = ref({ key: null, direction: "asc" });
 const userSort = ref({ key: null, direction: "asc" });
@@ -953,6 +985,18 @@ const refreshCache = async () => {
   }
 };
 
+const refreshUserStats = async () => {
+  userStatsRefreshing.value = true;
+  userStatsRefreshResult.value = null;
+  try {
+    const { data } = await api.post("/users/refresh-message-stats");
+    userStatsRefreshResult.value = data;
+    await fetchUsers(true);
+  } finally {
+    userStatsRefreshing.value = false;
+  }
+};
+
 const dismissCacheRefreshResult = () => {
   cacheRefreshResult.value = null;
 };
@@ -1339,6 +1383,29 @@ button:disabled {
 
 .cache-refresh-table {
   max-height: 240px;
+}
+
+.user-stats-refresh {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.user-stats-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.user-stats-header h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.user-stats-summary {
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .cache-channel-title {

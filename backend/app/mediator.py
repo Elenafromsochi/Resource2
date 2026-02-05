@@ -279,6 +279,71 @@ class Mediator:
 
         return {'users_analyzed': users_analyzed, 'errors': errors}
 
+    async def refresh_user_message_stats(self) -> dict[str, int | list[str]]:
+        stats = await self.storage.messages.aggregate_user_message_stats()
+        channels = await self.storage.channels.list_all()
+        channel_ids = {channel['id'] for channel in channels}
+        user_rows: list[tuple[int, int]] = []
+        channel_rows: list[tuple[int, int, int]] = []
+        messages_total = 0
+        unknown_channel_ids: set[int] = set()
+
+        for entry in stats:
+            user_id = entry.get('user_id')
+            if user_id is None:
+                continue
+            try:
+                user_id = int(user_id)
+            except (TypeError, ValueError):
+                continue
+            total = entry.get('total', 0)
+            try:
+                total = int(total)
+            except (TypeError, ValueError):
+                total = 0
+            user_rows.append((user_id, total))
+            messages_total += total
+            for channel in entry.get('channels', []) or []:
+                channel_id = channel.get('channel_id')
+                if channel_id is None:
+                    continue
+                try:
+                    channel_id = int(channel_id)
+                except (TypeError, ValueError):
+                    continue
+                if channel_id not in channel_ids:
+                    unknown_channel_ids.add(channel_id)
+                    continue
+                count = channel.get('messages_count', 0)
+                try:
+                    count = int(count)
+                except (TypeError, ValueError):
+                    count = 0
+                channel_rows.append((channel_id, user_id, count))
+
+        keep_user_ids = [row[0] for row in user_rows]
+        await self.storage.users.reset_messages_counts(
+            keep_user_ids if keep_user_ids else None,
+        )
+        await self.storage.users.replace_all_channel_users(channel_rows)
+        await self.storage.users.upsert_message_counts(user_rows)
+
+        errors: list[str] = []
+        if unknown_channel_ids:
+            errors.append(
+                'Пропущены сообщения по '
+                f'{len(unknown_channel_ids)} каналам, которых нет в базе.',
+            )
+
+        channels_with_messages = len({row[0] for row in channel_rows})
+
+        return {
+            'users_updated': len(user_rows),
+            'channels_with_messages': channels_with_messages,
+            'messages_total': messages_total,
+            'errors': errors,
+        }
+
     def normalize_identifier(self, value: str) -> str | int | None:
         raw = value.strip()
         if not raw:

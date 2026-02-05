@@ -73,3 +73,64 @@ class MessagesRepository(BaseMongoRepository):
             'modified': result.modified_count,
             'skipped': skipped,
         }
+
+    async def aggregate_user_message_stats(self) -> list[dict[str, Any]]:
+        pipeline = [
+            {
+                '$project': {
+                    'sender_id': {
+                        '$ifNull': [
+                            '$from_id.user_id',
+                            '$sender_id',
+                        ]
+                    },
+                    'channel_id': {
+                        '$ifNull': [
+                            '$peer_id.channel_id',
+                            '$peer_id.chat_id',
+                        ]
+                    },
+                }
+            },
+            {
+                '$match': {
+                    'sender_id': {'$ne': None},
+                    'channel_id': {'$ne': None},
+                    '$expr': {'$ne': ['$sender_id', '$channel_id']},
+                }
+            },
+            {
+                '$group': {
+                    '_id': {
+                        'user_id': '$sender_id',
+                        'channel_id': '$channel_id',
+                    },
+                    'messages_count': {'$sum': 1},
+                }
+            },
+            {
+                '$group': {
+                    '_id': '$_id.user_id',
+                    'total': {'$sum': '$messages_count'},
+                    'channels': {
+                        '$push': {
+                            'channel_id': '$_id.channel_id',
+                            'messages_count': '$messages_count',
+                        }
+                    },
+                }
+            },
+            {
+                '$project': {
+                    '_id': 0,
+                    'user_id': '$_id',
+                    'total': 1,
+                    'channels': 1,
+                }
+            },
+        ]
+
+        def run():
+            return list(self.collection.aggregate(pipeline, allowDiskUse=True))
+
+        return await asyncio.to_thread(run)
