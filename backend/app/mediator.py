@@ -325,8 +325,8 @@ class Mediator:
         await self.storage.users.reset_messages_counts(
             keep_user_ids if keep_user_ids else None,
         )
-        await self.storage.users.replace_all_channel_users(channel_rows)
         await self.storage.users.upsert_message_counts(user_rows)
+        await self.storage.users.replace_all_channel_users(channel_rows)
 
         errors: list[str] = []
         if unknown_channel_ids:
