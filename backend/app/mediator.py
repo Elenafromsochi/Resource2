@@ -242,27 +242,11 @@ class Mediator:
                 except (TypeError, ValueError):
                     continue
                 channel_ids.add(channel_id)
-        errors: list[str] = []
-        updated_ids: list[int] = []
-        if user_ids:
-            try:
-                updated_ids, profile_errors = await self.refresh_user_profiles(
-                    user_ids
-                )
-                errors.extend(profile_errors)
-            except Exception as exc:
-                errors.append(f'user profiles: {exc}')
-        if user_ids:
-            updated_set = set(updated_ids)
-            missing_ids = [
-                user_id for user_id in user_ids if user_id not in updated_set
-            ]
-            await self.storage.users.ensure_users_exist(missing_ids)
         return {
             'users_updated': len(user_ids),
             'channels_with_messages': len(channel_ids),
             'messages_total': messages_total,
-            'errors': errors,
+            'errors': [],
         }
 
     async def refresh_user_profiles(
