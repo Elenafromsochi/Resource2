@@ -162,30 +162,6 @@
             </ul>
           </div>
         </div>
-        <div v-if="userStatsRefreshResult" class="user-stats-refresh">
-          <div class="user-stats-header">
-            <h3>Статистика сообщений обновлена</h3>
-            <span class="user-stats-summary">
-              Пользователей: {{ userStatsRefreshResult.users_updated }},
-              каналов: {{ userStatsRefreshResult.channels_with_messages }},
-              сообщений: {{ userStatsRefreshResult.messages_total }}
-            </span>
-          </div>
-          <div
-            v-if="
-              userStatsRefreshResult.errors &&
-              userStatsRefreshResult.errors.length
-            "
-            class="analysis-errors"
-          >
-            <h3>Ошибки обновления статистики</h3>
-            <ul>
-              <li v-for="(error, index) in userStatsRefreshResult.errors" :key="index">
-                {{ error }}
-              </li>
-            </ul>
-          </div>
-        </div>
       </section>
 
       <section class="block">
@@ -404,6 +380,30 @@
           >
             Обновить
           </button>
+        </div>
+        <div v-if="userStatsRefreshResult" class="user-stats-refresh">
+          <div class="user-stats-header">
+            <h3>Статистика сообщений обновлена</h3>
+            <span class="user-stats-summary">
+              Пользователей: {{ userStatsRefreshResult.users_updated }},
+              каналов: {{ userStatsRefreshResult.channels_with_messages }},
+              сообщений: {{ userStatsRefreshResult.messages_total }}
+            </span>
+          </div>
+          <div
+            v-if="
+              userStatsRefreshResult.errors &&
+              userStatsRefreshResult.errors.length
+            "
+            class="analysis-errors"
+          >
+            <h3>Ошибки обновления статистики</h3>
+            <ul>
+              <li v-for="(error, index) in userStatsRefreshResult.errors" :key="index">
+                {{ error }}
+              </li>
+            </ul>
+          </div>
         </div>
         <div class="table-container" @scroll="onUsersScroll">
           <table class="compact-table">
