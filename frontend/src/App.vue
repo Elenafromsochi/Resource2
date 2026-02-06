@@ -733,6 +733,35 @@ const sortRecords = (records, sortState, sorters) => {
   });
 };
 
+const mergeUniqueById = (existing, incoming) => {
+  if (!Array.isArray(incoming) || incoming.length === 0) {
+    return existing;
+  }
+  const map = new Map();
+  for (const item of existing) {
+    if (!item) {
+      continue;
+    }
+    const id = item.id;
+    if (id === null || id === undefined) {
+      continue;
+    }
+    map.set(id, item);
+  }
+  for (const item of incoming) {
+    if (!item) {
+      continue;
+    }
+    const id = item.id;
+    if (id === null || id === undefined) {
+      continue;
+    }
+    const current = map.get(id);
+    map.set(id, current ? { ...current, ...item } : item);
+  }
+  return Array.from(map.values());
+};
+
 const setSort = (sortRef, key) => {
   const current = sortRef.value;
   if (current.key === key) {
@@ -854,7 +883,7 @@ const fetchUsers = async (reset = false) => {
     if (userListRequestId.value !== requestId) {
       return;
     }
-    users.value.push(...data.items);
+    users.value = mergeUniqueById(users.value, data.items);
     if (data.next_offset === null) {
       userHasMore.value = false;
     } else {

@@ -17,7 +17,15 @@ async def list_users(
     limit: int = Query(30),
     search: str | None = Query(None),
 ):
-    items = await request.app.state.storage.users.list(offset, limit, search)
+    raw_items = await request.app.state.storage.users.list(offset, limit, search)
+    items = []
+    seen_ids = set()
+    for item in raw_items:
+        user_id = item.get('id')
+        if user_id in seen_ids:
+            continue
+        seen_ids.add(user_id)
+        items.append(item)
     if items:
         user_ids = [item['id'] for item in items]
         stats = (
@@ -32,7 +40,7 @@ async def list_users(
             item['channel_messages'] = stats_map.get(item['id'], [])
     else:
         items = []
-    next_offset = offset + limit if len(items) == limit else None
+    next_offset = offset + limit if len(raw_items) == limit else None
     return {'items': items, 'next_offset': next_offset}
 
 
