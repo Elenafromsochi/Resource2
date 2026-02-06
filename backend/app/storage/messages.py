@@ -143,7 +143,7 @@ class MessagesRepository(BaseMongoRepository):
 
     async def aggregate_user_message_stats(self) -> list[dict[str, Any]]:
         pipeline = self._build_user_message_stats_pipeline()
-        cursor = self.collection.aggregate(pipeline, allowDiskUse=True)
+        cursor = await self.collection.aggregate(pipeline, allowDiskUse=True)
         return [doc async for doc in cursor]
 
     async def aggregate_user_message_stats_for_users(
@@ -155,5 +155,5 @@ class MessagesRepository(BaseMongoRepository):
             return []
         pipeline = self._build_user_message_stats_pipeline(normalized)
 
-        cursor = self.collection.aggregate(pipeline, allowDiskUse=True)
+        cursor = await self.collection.aggregate(pipeline, allowDiskUse=True)
         return [doc async for doc in cursor]
