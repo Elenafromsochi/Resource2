@@ -32,21 +32,10 @@ class ChannelDetailsResponse(BaseModel):
     members_count: int | None
 
 
-class AnalyzeRequest(BaseModel):
-    date_from: datetime
-    date_to: datetime
-    channel_ids: list[int] | None = None
-
-
 class RefreshMessagesRequest(BaseModel):
     date_from: datetime
     date_to: datetime
     channel_ids: list[int] | None = None
-
-
-class AnalyzeResponse(BaseModel):
-    users_analyzed: int
-    errors: list[str] = Field(default_factory=list)
 
 
 class RefreshMessagesChannelStats(BaseModel):

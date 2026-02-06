@@ -68,8 +68,33 @@ class MessagesRepository(BaseMongoRepository):
             'skipped': skipped,
         }
 
-    async def aggregate_user_message_stats(self) -> list[dict[str, Any]]:
-        pipeline = [
+    @staticmethod
+    def _normalize_user_ids(user_ids: list[int] | None) -> list[int]:
+        if not user_ids:
+            return []
+        normalized: list[int] = []
+        for user_id in user_ids:
+            if user_id is None:
+                continue
+            try:
+                normalized.append(int(user_id))
+            except (TypeError, ValueError):
+                continue
+        return normalized
+
+    def _build_user_message_stats_pipeline(
+        self,
+        user_ids: list[int] | None = None,
+    ) -> list[dict[str, Any]]:
+        match_doc: dict[str, Any] = {
+            'channel_id': {'$ne': None},
+            '$expr': {'$ne': ['$sender_id', '$channel_id']},
+        }
+        if user_ids:
+            match_doc['sender_id'] = {'$in': user_ids}
+        else:
+            match_doc['sender_id'] = {'$ne': None}
+        return [
             {
                 '$project': {
                     'sender_id': {
@@ -86,13 +111,7 @@ class MessagesRepository(BaseMongoRepository):
                     },
                 }
             },
-            {
-                '$match': {
-                    'sender_id': {'$ne': None},
-                    'channel_id': {'$ne': None},
-                    '$expr': {'$ne': ['$sender_id', '$channel_id']},
-                }
-            },
+            {'$match': match_doc},
             {
                 '$group': {
                     '_id': {
@@ -123,6 +142,23 @@ class MessagesRepository(BaseMongoRepository):
                 }
             },
         ]
+
+    async def aggregate_user_message_stats(self) -> list[dict[str, Any]]:
+        pipeline = self._build_user_message_stats_pipeline()
+
+        def run():
+            return list(self.collection.aggregate(pipeline, allowDiskUse=True))
+
+        return await asyncio.to_thread(run)
+
+    async def aggregate_user_message_stats_for_users(
+        self,
+        user_ids: list[int],
+    ) -> list[dict[str, Any]]:
+        normalized = self._normalize_user_ids(user_ids)
+        if not normalized:
+            return []
+        pipeline = self._build_user_message_stats_pipeline(normalized)
 
         def run():
             return list(self.collection.aggregate(pipeline, allowDiskUse=True))

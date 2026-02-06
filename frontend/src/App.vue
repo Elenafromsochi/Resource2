@@ -48,18 +48,6 @@
             >
               Обновить кэш
             </button>
-            <button
-              :disabled="cacheRefreshing || userListLoading || userStatsRefreshing"
-              @click="getUsersList"
-            >
-              Получить список пользователей
-            </button>
-            <button
-              :disabled="cacheRefreshing || userListLoading || userStatsRefreshing"
-              @click="refreshUserStats"
-            >
-              Обновить статистику сообщений
-            </button>
           </div>
         </div>
         <div class="table-container analysis-table">
@@ -113,21 +101,6 @@
               </tr>
             </tbody>
           </table>
-        </div>
-        <div
-          v-if="
-            analysisResult &&
-            analysisResult.errors &&
-            analysisResult.errors.length
-          "
-          class="analysis-errors"
-        >
-          <h3>Ошибки анализа</h3>
-          <ul>
-            <li v-for="(error, index) in analysisResult.errors" :key="index">
-              {{ error }}
-            </li>
-          </ul>
         </div>
         <div v-if="cacheRefreshResult" class="cache-refresh">
           <div class="cache-refresh-header">
@@ -424,6 +397,12 @@
               ×
             </button>
           </div>
+          <button
+            :disabled="userStatsRefreshing || userListLoading"
+            @click="refreshUserStats"
+          >
+            Обновить
+          </button>
         </div>
         <div class="table-container" @scroll="onUsersScroll">
           <table class="compact-table">
@@ -579,7 +558,6 @@ const rangeEndDays = ref(analysisRangeMaxDays);
 const userListLoading = ref(false);
 const cacheRefreshing = ref(false);
 const userStatsRefreshing = ref(false);
-const analysisResult = ref(null);
 const cacheRefreshResult = ref(null);
 const userStatsRefreshResult = ref(null);
 
@@ -944,26 +922,6 @@ const importDialogs = async () => {
   await api.post("/channels/import-dialogs");
   await fetchChannels(true);
   await fetchChannelsForSelect();
-};
-
-const getUsersList = async () => {
-  userListLoading.value = true;
-  analysisResult.value = null;
-  const dateFrom = getUtcStartDate(rangeEndDays.value).toISOString();
-  const dateTo = getUtcEndDate(rangeStartDays.value).toISOString();
-  const payload = {
-    date_from: dateFrom,
-    date_to: dateTo,
-    channel_ids:
-      selectedChannelIds.value.length > 0 ? selectedChannelIds.value : null,
-  };
-  try {
-    const { data } = await api.post("/users/analyze", payload);
-    analysisResult.value = data;
-    await fetchUsers(true);
-  } finally {
-    userListLoading.value = false;
-  }
 };
 
 const refreshCache = async () => {
