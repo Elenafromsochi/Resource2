@@ -979,7 +979,6 @@ const refreshUserStats = async () => {
   try {
     const { data } = await api.post("/users/refresh-message-stats");
     userStatsRefreshResult.value = data;
-    await fetchUsers(true);
   } finally {
     userStatsRefreshing.value = false;
   }
