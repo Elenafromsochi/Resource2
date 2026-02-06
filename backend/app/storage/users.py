@@ -4,32 +4,6 @@ from .base import BaseRepository
 
 
 class UsersRepository(BaseRepository):
-    async def attach_channel_messages(self, rows):
-        items = [dict(row) for row in rows]
-        if not items:
-            return items
-        user_ids = [item['id'] for item in items]
-        channel_rows = await self.pool.fetch(
-            """
-            SELECT user_id, channel_id, messages_count
-            FROM channel_users
-            WHERE user_id = ANY($1::bigint[])
-            ORDER BY channel_id ASC
-            """,
-            user_ids,
-        )
-        messages_by_user: dict[int, list[dict[str, int]]] = {}
-        for row in channel_rows:
-            messages_by_user.setdefault(row['user_id'], []).append(
-                {
-                    'channel_id': row['channel_id'],
-                    'messages_count': row['messages_count'],
-                }
-            )
-        for item in items:
-            item['channel_messages'] = messages_by_user.get(item['id'], [])
-        return items
-
     async def upsert(self, user):
         row = await self.pool.fetchrow(
             """
@@ -94,39 +68,6 @@ class UsersRepository(BaseRepository):
         )
         return dict(row) if row else None
 
-    async def replace_user_channels(self, user_id, channel_counts):
-        if not channel_counts:
-            return
-        values = [
-            (channel_id, user_id, messages_count)
-            for channel_id, messages_count in channel_counts.items()
-        ]
-        async with self.pool.acquire() as conn:
-            await conn.executemany(
-                """
-                INSERT INTO channel_users (channel_id, user_id, messages_count)
-                VALUES ($1, $2, $3)
-                ON CONFLICT (channel_id, user_id)
-                DO UPDATE SET messages_count = EXCLUDED.messages_count
-                """,
-                values,
-            )
-
-    async def replace_all_channel_users(self, channel_rows):
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute('DELETE FROM channel_users')
-                if channel_rows:
-                    await conn.executemany(
-                        """
-                        INSERT INTO channel_users (channel_id, user_id, messages_count)
-                        VALUES ($1, $2, $3)
-                        ON CONFLICT (channel_id, user_id)
-                        DO UPDATE SET messages_count = EXCLUDED.messages_count
-                        """,
-                        channel_rows,
-                    )
-
     async def ensure_users_exist(self, user_ids):
         if not user_ids:
             return
@@ -168,7 +109,7 @@ class UsersRepository(BaseRepository):
                     offset,
                     limit,
                 )
-                return await self.attach_channel_messages(rows)
+                return [dict(row) for row in rows]
         rows = await self.pool.fetch(
             """
             SELECT *
@@ -179,7 +120,7 @@ class UsersRepository(BaseRepository):
             offset,
             limit,
         )
-        return await self.attach_channel_messages(rows)
+        return [dict(row) for row in rows]
 
     async def get(self, user_id: int) -> dict[str, Any] | None:
         row = await self.pool.fetchrow(
@@ -187,22 +128,3 @@ class UsersRepository(BaseRepository):
             user_id,
         )
         return dict(row) if row else None
-
-    async def list_user_groups(self, user_id):
-        rows = await self.pool.fetch(
-            """
-            SELECT
-                c.id,
-                c.username,
-                c.title,
-                c.channel_type,
-                c.link
-            FROM channel_users cu
-            JOIN channels c ON c.id = cu.channel_id
-            WHERE cu.user_id = $1
-              AND c.channel_type = 'group'
-            ORDER BY c.id ASC
-            """,
-            user_id,
-        )
-        return [dict(row) for row in rows]

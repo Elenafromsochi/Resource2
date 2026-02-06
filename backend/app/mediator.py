@@ -212,79 +212,11 @@ class Mediator:
             'errors': errors,
         }
 
-    async def analyze_activity(
-        self,
-        date_from: datetime,
-        date_to: datetime,
-        channel_ids: list[int] | None = None,
-    ) -> dict[str, int]:
-        if channel_ids:
-            channels = await self.storage.channels.get_by_ids(channel_ids)
-        else:
-            channels = await self.storage.channels.list_all()
-        user_stats: dict[int, dict[str, Any]] = {}
-        errors: list[str] = []
-        message_batch_size = 200
-        for channel in channels:
-            channel_id = channel.get('id')
-            try:
-                entity = await self.resolve_channel_entity(channel)
-            except Exception as exc:
-                errors.append(f'channel {channel_id}: {exc}')
-                continue
-            try:
-                message_batch: list[dict[str, Any]] = []
-                async for message in self.telegram.client.iter_messages(
-                    entity,
-                    offset_date=date_to,
-                ):
-                    if message.date < date_from:
-                        break
-                    message_batch.append(message.to_dict())
-                    if len(message_batch) >= message_batch_size:
-                        await self.storage.messages.upsert_many(message_batch)
-                        message_batch.clear()
-                    sender_id = message.sender_id
-                    if not sender_id:
-                        continue
-                    stats = user_stats.setdefault(
-                        sender_id,
-                        {'total': 0, 'channels': {}},
-                    )
-                    stats['total'] += 1
-                    stats['channels'][channel['id']] = (
-                        stats['channels'].get(channel['id'], 0) + 1
-                    )
-                if message_batch:
-                    await self.storage.messages.upsert_many(message_batch)
-            except Exception as exc:
-                errors.append(f'channel {channel_id}: {exc}')
-                continue
-
-        users_analyzed = 0
-        for user_id, stats in user_stats.items():
-            try:
-                user_entity, about = await self.get_user_details(user_id)
-                user = self.format_user(user_entity, about)
-                await self.storage.users.upsert(user)
-                await self.storage.users.replace_user_channels(
-                    user_id,
-                    stats['channels'],
-                )
-                users_analyzed += 1
-            except Exception as exc:
-                errors.append(f'user {user_id}: {exc}')
-
-        return {'users_analyzed': users_analyzed, 'errors': errors}
-
     async def refresh_user_message_stats(self) -> dict[str, int | list[str]]:
         stats = await self.storage.messages.aggregate_user_message_stats()
-        channels = await self.storage.channels.list_all()
-        channel_ids = {channel['id'] for channel in channels}
         user_ids: list[int] = []
-        channel_rows: list[tuple[int, int, int]] = []
         messages_total = 0
-        unknown_channel_ids: set[int] = set()
+        channel_ids: set[int] = set()
 
         for entry in stats:
             user_id = entry.get('user_id')
@@ -309,33 +241,14 @@ class Mediator:
                     channel_id = int(channel_id)
                 except (TypeError, ValueError):
                     continue
-                if channel_id not in channel_ids:
-                    unknown_channel_ids.add(channel_id)
-                    continue
-                count = channel.get('messages_count', 0)
-                try:
-                    count = int(count)
-                except (TypeError, ValueError):
-                    count = 0
-                channel_rows.append((channel_id, user_id, count))
+                channel_ids.add(channel_id)
 
         await self.storage.users.ensure_users_exist(user_ids)
-        await self.storage.users.replace_all_channel_users(channel_rows)
-
-        errors: list[str] = []
-        if unknown_channel_ids:
-            errors.append(
-                'Пропущены сообщения по '
-                f'{len(unknown_channel_ids)} каналам, которых нет в базе.',
-            )
-
-        channels_with_messages = len({row[0] for row in channel_rows})
-
         return {
             'users_updated': len(user_ids),
-            'channels_with_messages': channels_with_messages,
+            'channels_with_messages': len(channel_ids),
             'messages_total': messages_total,
-            'errors': errors,
+            'errors': [],
         }
 
     def normalize_identifier(self, value: str) -> str | int | None:

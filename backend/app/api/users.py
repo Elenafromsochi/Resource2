@@ -2,24 +2,12 @@ from fastapi import APIRouter
 from fastapi import Query
 from fastapi import Request
 
-from app.schemas import AnalyzeRequest
-from app.schemas import AnalyzeResponse
 from app.schemas import RefreshUserStatsResponse
 from app.schemas import UserDetailsResponse
 from app.schemas import UserListResponse
 
 
 router = APIRouter(prefix='/users')
-
-
-@router.post('/analyze', response_model=AnalyzeResponse)
-async def analyze_users(payload: AnalyzeRequest, request: Request):
-    result = await request.app.state.mediator.analyze_activity(
-        payload.date_from,
-        payload.date_to,
-        payload.channel_ids,
-    )
-    return result
 
 
 @router.get('', response_model=UserListResponse)
@@ -30,6 +18,20 @@ async def list_users(
     search: str | None = Query(None),
 ):
     items = await request.app.state.storage.users.list(offset, limit, search)
+    if items:
+        user_ids = [item['id'] for item in items]
+        stats = (
+            await request.app.state.storage.messages.aggregate_user_message_stats_for_users(
+                user_ids
+            )
+        )
+        stats_map = {
+            entry['user_id']: entry.get('channels', []) or [] for entry in stats
+        }
+        for item in items:
+            item['channel_messages'] = stats_map.get(item['id'], [])
+    else:
+        items = []
     next_offset = offset + limit if len(items) == limit else None
     return {'items': items, 'next_offset': next_offset}
 
@@ -48,7 +50,32 @@ async def get_user_details(user_id: int, request: Request):
             'photo': user_data.get('photo'),
         }
     )
-    groups = await request.app.state.storage.users.list_user_groups(user_id)
+    stats = (
+        await request.app.state.storage.messages.aggregate_user_message_stats_for_users(
+            [user_id]
+        )
+    )
+    channel_ids: set[int] = set()
+    for entry in stats:
+        for channel in entry.get('channels', []) or []:
+            channel_id = channel.get('channel_id')
+            if channel_id is None:
+                continue
+            try:
+                channel_ids.add(int(channel_id))
+            except (TypeError, ValueError):
+                continue
+    groups = []
+    if channel_ids:
+        channels = await request.app.state.storage.channels.get_by_ids(
+            list(channel_ids)
+        )
+        groups = [
+            channel
+            for channel in channels
+            if channel.get('channel_type') == 'group'
+        ]
+        groups.sort(key=lambda item: item.get('id') or 0)
     return {**user_data, 'groups': groups}
 
 
