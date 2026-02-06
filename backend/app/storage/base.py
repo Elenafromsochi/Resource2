@@ -1,7 +1,7 @@
 from logging import getLogger
 
 import asyncpg
-from pymongo import MongoClient
+from motor.motor_asyncio import AsyncIOMotorClient as AsyncMongoClient
 
 from app.config import DB_POOL_MAX
 from app.config import DB_POOL_MIN
@@ -33,13 +33,13 @@ class MongoEngine:
     def __init__(self, url: str, db_name: str):
         self.url = url
         self.db_name = db_name
-        self.client: MongoClient | None = None
+        self.client: AsyncMongoClient | None = None
         self.db = None
 
     async def init(self):
         if self.client:
             return
-        self.client = MongoClient(self.url)
+        self.client = AsyncMongoClient(self.url)
         self.db = self.client[self.db_name]
 
     async def close(self):
