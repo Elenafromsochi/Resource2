@@ -242,14 +242,58 @@ class Mediator:
                 except (TypeError, ValueError):
                     continue
                 channel_ids.add(channel_id)
-
-        await self.storage.users.ensure_users_exist(user_ids)
+        errors: list[str] = []
+        updated_ids: list[int] = []
+        if user_ids:
+            try:
+                updated_ids, profile_errors = await self.refresh_user_profiles(
+                    user_ids
+                )
+                errors.extend(profile_errors)
+            except Exception as exc:
+                errors.append(f'user profiles: {exc}')
+        if user_ids:
+            updated_set = set(updated_ids)
+            missing_ids = [
+                user_id for user_id in user_ids if user_id not in updated_set
+            ]
+            await self.storage.users.ensure_users_exist(missing_ids)
         return {
             'users_updated': len(user_ids),
             'channels_with_messages': len(channel_ids),
             'messages_total': messages_total,
-            'errors': [],
+            'errors': errors,
         }
+
+    async def refresh_user_profiles(
+        self,
+        user_ids: list[int],
+        concurrency: int = 5,
+    ) -> tuple[list[int], list[str]]:
+        if not user_ids:
+            return [], []
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def refresh_one(user_id: int) -> tuple[bool, str | None]:
+            async with semaphore:
+                try:
+                    entity, about = await self.get_user_details(user_id)
+                    user_data = self.format_user(entity, about)
+                    await self.storage.users.upsert(user_data)
+                    return True, None
+                except Exception as exc:
+                    return False, f'user {user_id}: {exc}'
+
+        results = await asyncio.gather(
+            *(refresh_one(user_id) for user_id in user_ids)
+        )
+        updated_ids = [
+            user_id
+            for user_id, (success, _) in zip(user_ids, results)
+            if success
+        ]
+        errors = [error for _, error in results if error]
+        return updated_ids, errors
 
     def normalize_identifier(self, value: str) -> str | int | None:
         raw = value.strip()
