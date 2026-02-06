@@ -59,7 +59,6 @@ class RefreshMessagesChannelStats(BaseModel):
 
 class RefreshMessagesResponse(BaseModel):
     channels_processed: int
-    messages_processed: int
     messages_upserted: int
     messages_updated: int
     channels: list[RefreshMessagesChannelStats] = Field(default_factory=list)

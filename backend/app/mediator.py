@@ -141,29 +141,49 @@ class Mediator:
         errors: list[str] = []
         message_batch_size = 200
         channels_processed = 0
-        messages_processed = 0
         messages_upserted = 0
         messages_updated = 0
         channel_stats: list[dict[str, Any]] = []
+
+        def init_channel_stats(channel: dict[str, Any]) -> dict[str, Any]:
+            return {
+                'channel_id': channel.get('id'),
+                'channel_title': channel.get('title') or 'Untitled',
+                'channel_username': channel.get('username'),
+                'messages_upserted': 0,
+                'messages_updated': 0,
+            }
+
+        def apply_upsert_stats(
+            stats: dict[str, int],
+            channel_stat: dict[str, Any],
+        ) -> None:
+            upserted = int(stats.get('upserted', 0) or 0)
+            modified = int(stats.get('modified', 0) or 0)
+            nonlocal messages_upserted
+            nonlocal messages_updated
+            messages_upserted += upserted
+            messages_updated += modified
+            channel_stat['messages_upserted'] += upserted
+            channel_stat['messages_updated'] += modified
+
+        async def flush_batch(
+            batch: list[dict[str, Any]],
+            channel_stat: dict[str, Any],
+        ) -> None:
+            if not batch:
+                return
+            stats = await self.storage.messages.upsert_many(batch)
+            apply_upsert_stats(stats, channel_stat)
+            batch.clear()
         for channel in channels:
-            channel_id = channel.get('id')
-            channel_title = channel.get('title') or 'Untitled'
-            channel_username = channel.get('username')
-            channel_messages_upserted = 0
-            channel_messages_updated = 0
+            channel_stat = init_channel_stats(channel)
+            channel_id = channel_stat['channel_id']
             try:
                 entity = await self.resolve_channel_entity(channel)
             except Exception as exc:
                 errors.append(f'channel {channel_id}: {exc}')
-                channel_stats.append(
-                    {
-                        'channel_id': channel_id,
-                        'channel_title': channel_title,
-                        'channel_username': channel_username,
-                        'messages_upserted': channel_messages_upserted,
-                        'messages_updated': channel_messages_updated,
-                    }
-                )
+                channel_stats.append(channel_stat)
                 continue
             channels_processed += 1
             try:
@@ -179,34 +199,13 @@ class Mediator:
                         continue
                     message_batch.append(message_data)
                     if len(message_batch) >= message_batch_size:
-                        stats = await self.storage.messages.upsert_many(message_batch)
-                        messages_processed += stats['processed']
-                        messages_upserted += stats['upserted']
-                        messages_updated += stats['modified']
-                        channel_messages_upserted += stats['upserted']
-                        channel_messages_updated += stats['modified']
-                        message_batch.clear()
-                if message_batch:
-                    stats = await self.storage.messages.upsert_many(message_batch)
-                    messages_processed += stats['processed']
-                    messages_upserted += stats['upserted']
-                    messages_updated += stats['modified']
-                    channel_messages_upserted += stats['upserted']
-                    channel_messages_updated += stats['modified']
+                        await flush_batch(message_batch, channel_stat)
+                await flush_batch(message_batch, channel_stat)
             except Exception as exc:
                 errors.append(f'channel {channel_id}: {exc}')
-            channel_stats.append(
-                {
-                    'channel_id': channel_id,
-                    'channel_title': channel_title,
-                    'channel_username': channel_username,
-                    'messages_upserted': channel_messages_upserted,
-                    'messages_updated': channel_messages_updated,
-                }
-            )
+            channel_stats.append(channel_stat)
         return {
             'channels_processed': channels_processed,
-            'messages_processed': messages_processed,
             'messages_upserted': messages_upserted,
             'messages_updated': messages_updated,
             'channels': channel_stats,
