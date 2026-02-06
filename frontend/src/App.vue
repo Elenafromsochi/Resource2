@@ -398,6 +398,7 @@
             </button>
           </div>
           <button
+            class="align-right"
             :disabled="userStatsRefreshing || userListLoading"
             @click="refreshUserStats"
           >
@@ -1088,6 +1089,10 @@ onMounted(async () => {
 
 .row.compact {
   gap: 6px;
+}
+
+.align-right {
+  margin-left: auto;
 }
 
 .input-with-clear {
