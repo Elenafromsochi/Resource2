@@ -1,7 +1,7 @@
 from logging import getLogger
 
 import asyncpg
-from motor.motor_asyncio import AsyncIOMotorClient as AsyncMongoClient
+from pymongo import AsyncMongoClient
 
 from app.config import DB_POOL_MAX
 from app.config import DB_POOL_MIN
