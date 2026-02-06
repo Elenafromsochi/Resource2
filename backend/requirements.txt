@@ -1,7 +1,6 @@
 asyncpg
 colorlog
 fastapi
-motor
 openai
 pymongo
 telethon
