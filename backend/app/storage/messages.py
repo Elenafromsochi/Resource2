@@ -1,4 +1,3 @@
-import asyncio
 from typing import Any
 
 from pymongo import UpdateOne
@@ -56,8 +55,7 @@ class MessagesRepository(BaseMongoRepository):
                 'modified': 0,
                 'skipped': skipped,
             }
-        result = await asyncio.to_thread(
-            self.collection.bulk_write,
+        result = await self.collection.bulk_write(
             operations,
             ordered=False,
         )
@@ -145,11 +143,8 @@ class MessagesRepository(BaseMongoRepository):
 
     async def aggregate_user_message_stats(self) -> list[dict[str, Any]]:
         pipeline = self._build_user_message_stats_pipeline()
-
-        def run():
-            return list(self.collection.aggregate(pipeline, allowDiskUse=True))
-
-        return await asyncio.to_thread(run)
+        cursor = self.collection.aggregate(pipeline, allowDiskUse=True)
+        return await cursor.to_list(length=None)
 
     async def aggregate_user_message_stats_for_users(
         self,
@@ -160,7 +155,5 @@ class MessagesRepository(BaseMongoRepository):
             return []
         pipeline = self._build_user_message_stats_pipeline(normalized)
 
-        def run():
-            return list(self.collection.aggregate(pipeline, allowDiskUse=True))
-
-        return await asyncio.to_thread(run)
+        cursor = self.collection.aggregate(pipeline, allowDiskUse=True)
+        return await cursor.to_list(length=None)
