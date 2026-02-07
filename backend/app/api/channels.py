@@ -8,6 +8,8 @@ from app.schemas import ChannelListResponse
 from app.schemas import ChannelOut
 from app.schemas import RefreshMessagesRequest
 from app.schemas import RefreshMessagesResponse
+from app.schemas import RenderMessagesRequest
+from app.schemas import RenderMessagesResponse
 
 
 router = APIRouter(prefix='/channels')
@@ -73,3 +75,13 @@ async def refresh_messages(payload: RefreshMessagesRequest, request: Request):
         payload.date_to,
         payload.channel_ids,
     )
+
+
+@router.post('/render-messages', response_model=RenderMessagesResponse)
+async def render_messages(payload: RenderMessagesRequest, request: Request):
+    messages = await request.app.state.mediator.render_messages(
+        payload.channel_id,
+        payload.date_from,
+        payload.date_to,
+    )
+    return {'channel_id': payload.channel_id, 'messages': messages}

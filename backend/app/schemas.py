@@ -38,6 +38,12 @@ class RefreshMessagesRequest(BaseModel):
     channel_ids: list[int] | None = None
 
 
+class RenderMessagesRequest(BaseModel):
+    channel_id: int
+    date_from: datetime
+    date_to: datetime
+
+
 class RefreshMessagesChannelStats(BaseModel):
     channel_id: int
     channel_title: str
@@ -52,6 +58,11 @@ class RefreshMessagesResponse(BaseModel):
     messages_updated: int
     channels: list[RefreshMessagesChannelStats] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+
+
+class RenderMessagesResponse(BaseModel):
+    channel_id: int
+    messages: list[str] = Field(default_factory=list)
 
 
 class RefreshUserStatsResponse(BaseModel):

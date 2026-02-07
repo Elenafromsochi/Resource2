@@ -212,6 +212,24 @@ class Mediator:
             'errors': errors,
         }
 
+    async def render_messages(
+        self,
+        channel_id: int,
+        date_from: datetime,
+        date_to: datetime,
+    ) -> list[str]:
+        messages = await self.storage.messages.list_by_channel_and_date(
+            channel_id,
+            date_from,
+            date_to,
+        )
+        rendered: list[str] = []
+        for message in messages:
+            line = self._format_message_line(message)
+            if line:
+                rendered.append(line)
+        return rendered
+
     async def refresh_user_message_stats(self) -> dict[str, int | list[str]]:
         stats = await self.storage.messages.aggregate_user_message_stats()
         user_ids: list[int] = []
@@ -248,6 +266,125 @@ class Mediator:
             'messages_total': messages_total,
             'errors': [],
         }
+
+    def _format_message_line(self, message: dict[str, Any]) -> str | None:
+        message_id = self._safe_int(message.get('id'))
+        if message_id is None:
+            return None
+        user_id = self._get_message_user_id(message)
+        if user_id is None:
+            user_id = 0
+        parts = [f'm{message_id}', f'u{user_id}']
+        reply_id = self._get_reply_message_id(message)
+        if reply_id is not None:
+            parts.append(f'[reply m{reply_id}]')
+        forward_tag = self._format_forward_tag(message)
+        if forward_tag:
+            parts.append(forward_tag)
+        if self._message_has_media(message):
+            parts.append('[media]')
+        if self._message_has_poll(message):
+            parts.append('[pool]')
+        text = self._normalize_message_text(
+            message.get('message') or message.get('text')
+        )
+        if text:
+            parts.append(text)
+        return ' '.join(parts).strip()
+
+    @staticmethod
+    def _safe_int(value: Any) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _normalize_message_text(value: Any) -> str:
+        if value is None:
+            return ''
+        text = str(value)
+        text = ' '.join(text.splitlines())
+        return text.strip()
+
+    def _get_message_user_id(self, message: dict[str, Any]) -> int | None:
+        from_id = message.get('from_id')
+        if isinstance(from_id, dict):
+            user_id = self._safe_int(from_id.get('user_id'))
+            if user_id is not None:
+                return user_id
+        return self._safe_int(message.get('sender_id'))
+
+    def _get_reply_message_id(self, message: dict[str, Any]) -> int | None:
+        reply_to = message.get('reply_to')
+        if not isinstance(reply_to, dict):
+            return None
+        reply_id = reply_to.get('reply_to_msg_id')
+        if reply_id is None:
+            reply_id = reply_to.get('reply_to_message_id')
+        return self._safe_int(reply_id)
+
+    def _format_forward_tag(self, message: dict[str, Any]) -> str | None:
+        fwd = message.get('fwd_from')
+        if not isinstance(fwd, dict):
+            return None
+        parts: list[str] = []
+
+        def add_part(value: str | None) -> None:
+            if not value:
+                return
+            if value in parts:
+                return
+            parts.append(value)
+
+        from_id = fwd.get('from_id')
+        if isinstance(from_id, dict):
+            user_id = self._safe_int(from_id.get('user_id'))
+            if user_id is not None:
+                add_part(f'u{user_id}')
+            channel_id = self._safe_int(from_id.get('channel_id'))
+            if channel_id is not None:
+                channel_post = self._safe_int(fwd.get('channel_post'))
+                if channel_post is not None:
+                    add_part(f'ch{channel_id} m{channel_post}')
+                else:
+                    add_part(f'ch{channel_id}')
+        user_id = self._safe_int(fwd.get('user_id'))
+        if user_id is not None:
+            add_part(f'u{user_id}')
+        channel_id = self._safe_int(fwd.get('channel_id'))
+        if channel_id is not None:
+            channel_post = self._safe_int(fwd.get('channel_post'))
+            if channel_post is not None:
+                add_part(f'ch{channel_id} m{channel_post}')
+            else:
+                add_part(f'ch{channel_id}')
+        if not parts:
+            return None
+        return f"[forward {' | '.join(parts)}]"
+
+    @staticmethod
+    def _message_has_media(message: dict[str, Any]) -> bool:
+        media = message.get('media')
+        if not media:
+            return False
+        if isinstance(media, dict) and media.get('_') == 'MessageMediaEmpty':
+            return False
+        return True
+
+    @staticmethod
+    def _message_has_poll(message: dict[str, Any]) -> bool:
+        if message.get('poll'):
+            return True
+        media = message.get('media')
+        if isinstance(media, dict):
+            if media.get('_') == 'MessageMediaPoll':
+                return True
+            if media.get('poll') is not None:
+                return True
+        return False
 
     async def refresh_user_profiles(
         self,

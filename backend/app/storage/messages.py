@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any
 
 from pymongo import UpdateOne
@@ -65,6 +66,24 @@ class MessagesRepository(BaseMongoRepository):
             'modified': result.modified_count,
             'skipped': skipped,
         }
+
+    async def list_by_channel_and_date(
+        self,
+        channel_id: int,
+        date_from: datetime,
+        date_to: datetime,
+    ) -> list[dict[str, Any]]:
+        if channel_id is None:
+            return []
+        filter_doc: dict[str, Any] = {
+            'date': {'$gte': date_from, '$lte': date_to},
+            '$or': [
+                {'peer_id.channel_id': channel_id},
+                {'peer_id.chat_id': channel_id},
+            ],
+        }
+        cursor = self.collection.find(filter_doc).sort([('date', 1), ('id', 1)])
+        return [doc async for doc in cursor]
 
     @staticmethod
     def _normalize_user_ids(user_ids: list[int] | None) -> list[int]:
