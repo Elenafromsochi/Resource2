@@ -82,6 +82,25 @@ class UsersRepository(BaseRepository):
                 [(user_id,) for user_id in user_ids],
             )
 
+    async def list_by_ids(self, user_ids: list[int]) -> list[dict[str, Any]]:
+        if not user_ids:
+            return []
+        normalized: list[int] = []
+        for user_id in user_ids:
+            if user_id is None:
+                continue
+            try:
+                normalized.append(int(user_id))
+            except (TypeError, ValueError):
+                continue
+        if not normalized:
+            return []
+        rows = await self.pool.fetch(
+            'SELECT * FROM users WHERE id = ANY($1)',
+            normalized,
+        )
+        return [dict(row) for row in rows]
+
     async def list(self, offset, limit, search: str | None = None):
         if search:
             search_value = search.strip()

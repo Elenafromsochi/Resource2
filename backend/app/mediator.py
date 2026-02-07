@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from telethon.tl.functions.channels import GetFullChannelRequest
@@ -223,12 +223,82 @@ class Mediator:
             date_from,
             date_to,
         )
+        messages = await self._extend_messages_with_missing_replies(
+            channel_id,
+            messages,
+        )
+        user_ids = self._collect_message_user_ids(messages)
+        usernames = await self._get_usernames_by_ids(user_ids)
         rendered: list[str] = []
         for message in messages:
-            line = self._format_message_line(message)
+            line = self._format_message_line(message, usernames)
             if line:
                 rendered.append(line)
         return rendered
+
+    async def _extend_messages_with_missing_replies(
+        self,
+        channel_id: int,
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if not messages:
+            return []
+        message_by_id: dict[int, dict[str, Any]] = {}
+        ordered: list[dict[str, Any]] = []
+        for message in messages:
+            message_id = self._safe_int(message.get('id'))
+            if message_id is None:
+                continue
+            if message_id in message_by_id:
+                continue
+            message_by_id[message_id] = message
+            ordered.append(message)
+        missing_reply_ids: set[int] = set()
+        for message in ordered:
+            reply_id = self._get_reply_message_id(message)
+            if reply_id is not None and reply_id not in message_by_id:
+                missing_reply_ids.add(reply_id)
+        if missing_reply_ids:
+            reply_messages = await self.storage.messages.list_by_channel_and_ids(
+                channel_id,
+                list(missing_reply_ids),
+            )
+            for reply_message in reply_messages:
+                reply_id = self._safe_int(reply_message.get('id'))
+                if reply_id is None or reply_id in message_by_id:
+                    continue
+                message_by_id[reply_id] = reply_message
+                ordered.append(reply_message)
+        return sorted(ordered, key=self._message_sort_key)
+
+    def _collect_message_user_ids(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> set[int]:
+        user_ids: set[int] = set()
+        for message in messages:
+            user_id = self._get_message_user_id(message)
+            if user_id is not None:
+                user_ids.add(user_id)
+            user_ids.update(self._get_forward_user_ids(message))
+        return user_ids
+
+    async def _get_usernames_by_ids(
+        self,
+        user_ids: set[int],
+    ) -> dict[int, str]:
+        if not user_ids:
+            return {}
+        users = await self.storage.users.list_by_ids(list(user_ids))
+        usernames: dict[int, str] = {}
+        for user in users:
+            user_id = self._safe_int(user.get('id'))
+            if user_id is None:
+                continue
+            username = user.get('username')
+            if username:
+                usernames[user_id] = username
+        return usernames
 
     async def refresh_user_message_stats(self) -> dict[str, int | list[str]]:
         stats = await self.storage.messages.aggregate_user_message_stats()
@@ -267,18 +337,29 @@ class Mediator:
             'errors': [],
         }
 
-    def _format_message_line(self, message: dict[str, Any]) -> str | None:
+    def _format_message_line(
+        self,
+        message: dict[str, Any],
+        usernames: dict[int, str],
+    ) -> str | None:
         message_id = self._safe_int(message.get('id'))
         if message_id is None:
             return None
+        message_time = self._format_message_time(message.get('date'))
         user_id = self._get_message_user_id(message)
         if user_id is None:
             user_id = 0
-        parts = [f'm{message_id}', f'u{user_id}']
+        user_tag = self._format_user_tag(user_id, usernames)
+        parts = []
+        if message_time:
+            parts.append(message_time)
+        parts.append(f'm{message_id}')
+        if user_tag:
+            parts.append(user_tag)
         reply_id = self._get_reply_message_id(message)
         if reply_id is not None:
-            parts.append(f'[reply m{reply_id}]')
-        forward_tag = self._format_forward_tag(message)
+            parts.append(f'-> m{reply_id}')
+        forward_tag = self._format_forward_tag(message, usernames)
         if forward_tag:
             parts.append(forward_tag)
         if self._message_has_media(message):
@@ -291,6 +372,49 @@ class Mediator:
         if text:
             parts.append(text)
         return ' '.join(parts).strip()
+
+    @staticmethod
+    def _format_message_time(value: Any) -> str | None:
+        if isinstance(value, datetime):
+            return value.strftime('%H:%M:%S')
+        if isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            except ValueError:
+                return None
+            return parsed.strftime('%H:%M:%S')
+        return None
+
+    @staticmethod
+    def _message_sort_key(message: dict[str, Any]) -> tuple[float, int]:
+        date_value = message.get('date')
+        timestamp = 0.0
+        if isinstance(date_value, datetime):
+            if date_value.tzinfo:
+                timestamp = date_value.timestamp()
+            else:
+                timestamp = date_value.replace(tzinfo=timezone.utc).timestamp()
+        elif isinstance(date_value, str):
+            try:
+                parsed = datetime.fromisoformat(date_value.replace('Z', '+00:00'))
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, datetime):
+                if parsed.tzinfo:
+                    timestamp = parsed.timestamp()
+                else:
+                    timestamp = parsed.replace(tzinfo=timezone.utc).timestamp()
+        message_id = Mediator._safe_int(message.get('id')) or 0
+        return (timestamp, message_id)
+
+    @staticmethod
+    def _format_user_tag(user_id: int, usernames: dict[int, str]) -> str | None:
+        if user_id is None:
+            return None
+        username = usernames.get(user_id)
+        if username:
+            return f'u{username}'
+        return f'u{user_id}'
 
     @staticmethod
     def _safe_int(value: Any) -> int | None:
@@ -326,7 +450,11 @@ class Mediator:
             reply_id = reply_to.get('reply_to_message_id')
         return self._safe_int(reply_id)
 
-    def _format_forward_tag(self, message: dict[str, Any]) -> str | None:
+    def _format_forward_tag(
+        self,
+        message: dict[str, Any],
+        usernames: dict[int, str],
+    ) -> str | None:
         fwd = message.get('fwd_from')
         if not isinstance(fwd, dict):
             return None
@@ -343,7 +471,7 @@ class Mediator:
         if isinstance(from_id, dict):
             user_id = self._safe_int(from_id.get('user_id'))
             if user_id is not None:
-                add_part(f'u{user_id}')
+                add_part(self._format_user_tag(user_id, usernames))
             channel_id = self._safe_int(from_id.get('channel_id'))
             if channel_id is not None:
                 channel_post = self._safe_int(fwd.get('channel_post'))
@@ -353,7 +481,7 @@ class Mediator:
                     add_part(f'ch{channel_id}')
         user_id = self._safe_int(fwd.get('user_id'))
         if user_id is not None:
-            add_part(f'u{user_id}')
+            add_part(self._format_user_tag(user_id, usernames))
         channel_id = self._safe_int(fwd.get('channel_id'))
         if channel_id is not None:
             channel_post = self._safe_int(fwd.get('channel_post'))
@@ -363,7 +491,22 @@ class Mediator:
                 add_part(f'ch{channel_id}')
         if not parts:
             return None
-        return f"[forward {' | '.join(parts)}]"
+        return f"forwarded from {' | '.join(parts)}"
+
+    def _get_forward_user_ids(self, message: dict[str, Any]) -> set[int]:
+        fwd = message.get('fwd_from')
+        if not isinstance(fwd, dict):
+            return set()
+        user_ids: set[int] = set()
+        from_id = fwd.get('from_id')
+        if isinstance(from_id, dict):
+            user_id = self._safe_int(from_id.get('user_id'))
+            if user_id is not None:
+                user_ids.add(user_id)
+        user_id = self._safe_int(fwd.get('user_id'))
+        if user_id is not None:
+            user_ids.add(user_id)
+        return user_ids
 
     @staticmethod
     def _message_has_media(message: dict[str, Any]) -> bool:
