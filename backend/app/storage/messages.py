@@ -85,6 +85,94 @@ class MessagesRepository(BaseMongoRepository):
         cursor = self.collection.find(filter_doc).sort([('date', 1), ('id', 1)])
         return [doc async for doc in cursor]
 
+    async def list_by_channel_and_ids(
+        self,
+        channel_id: int,
+        message_ids: list[int],
+    ) -> list[dict[str, Any]]:
+        if channel_id is None:
+            return []
+        normalized: list[int] = []
+        for message_id in message_ids or []:
+            if message_id is None:
+                continue
+            try:
+                normalized.append(int(message_id))
+            except (TypeError, ValueError):
+                continue
+        if not normalized:
+            return []
+        filter_doc: dict[str, Any] = {
+            'id': {'$in': normalized},
+            '$or': [
+                {'peer_id.channel_id': channel_id},
+                {'peer_id.chat_id': channel_id},
+            ],
+        }
+        cursor = self.collection.find(filter_doc).sort([('date', 1), ('id', 1)])
+        return [doc async for doc in cursor]
+
+    async def list_by_channel_and_ids(
+        self,
+        channel_id: int,
+        message_ids: list[int],
+    ) -> list[dict[str, Any]]:
+        if channel_id is None or not message_ids:
+            return []
+        normalized: list[int] = []
+        for message_id in message_ids:
+            if message_id is None:
+                continue
+            try:
+                normalized.append(int(message_id))
+            except (TypeError, ValueError):
+                continue
+        if not normalized:
+            return []
+        filter_doc: dict[str, Any] = {
+            'id': {'$in': normalized},
+            '$or': [
+                {'peer_id.channel_id': channel_id},
+                {'peer_id.chat_id': channel_id},
+            ],
+        }
+        cursor = self.collection.find(filter_doc).sort([('date', 1), ('id', 1)])
+        return [doc async for doc in cursor]
+
+    @staticmethod
+    def _normalize_message_ids(message_ids: list[int] | None) -> list[int]:
+        if not message_ids:
+            return []
+        normalized: list[int] = []
+        for message_id in message_ids:
+            if message_id is None:
+                continue
+            try:
+                normalized.append(int(message_id))
+            except (TypeError, ValueError):
+                continue
+        return normalized
+
+    async def list_by_channel_and_ids(
+        self,
+        channel_id: int,
+        message_ids: list[int],
+    ) -> list[dict[str, Any]]:
+        if channel_id is None:
+            return []
+        normalized = self._normalize_message_ids(message_ids)
+        if not normalized:
+            return []
+        filter_doc: dict[str, Any] = {
+            'id': {'$in': normalized},
+            '$or': [
+                {'peer_id.channel_id': channel_id},
+                {'peer_id.chat_id': channel_id},
+            ],
+        }
+        cursor = self.collection.find(filter_doc).sort([('date', 1), ('id', 1)])
+        return [doc async for doc in cursor]
+
     @staticmethod
     def _normalize_user_ids(user_ids: list[int] | None) -> list[int]:
         if not user_ids:
