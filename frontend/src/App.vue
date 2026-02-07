@@ -43,10 +43,29 @@
           </div>
           <div class="analysis-actions">
             <button
-              :disabled="cacheRefreshing || userListLoading || userStatsRefreshing"
+              type="button"
+              :disabled="
+                cacheRefreshing ||
+                userListLoading ||
+                userStatsRefreshing ||
+                renderMessagesLoading
+              "
               @click="refreshCache"
             >
               Обновить кэш
+            </button>
+            <button
+              type="button"
+              :disabled="
+                cacheRefreshing ||
+                userListLoading ||
+                userStatsRefreshing ||
+                renderMessagesLoading ||
+                !canRenderMessages
+              "
+              @click="renderMessages"
+            >
+              Вывести сообщения
             </button>
           </div>
         </div>
@@ -161,6 +180,33 @@
               </li>
             </ul>
           </div>
+        </div>
+        <div v-if="renderMessagesLoading" class="muted">
+          Загрузка сообщений...
+        </div>
+        <div v-if="renderMessagesResult" class="render-messages">
+          <div class="render-messages-header">
+            <h3>Сообщения</h3>
+            <span class="render-messages-summary">
+              Канал: {{ formatSelectedChannelLabel(renderMessagesResult.channel_id) }},
+              сообщений: {{ renderMessagesResult.messages.length }}
+            </span>
+            <button
+              type="button"
+              class="cache-refresh-close"
+              aria-label="Скрыть сообщения"
+              @click="dismissRenderMessages"
+            >
+              Скрыть
+            </button>
+          </div>
+          <div class="render-messages-body">
+            <pre class="render-messages-content">{{ renderMessagesText }}</pre>
+          </div>
+        </div>
+        <div v-if="renderMessagesError" class="analysis-errors">
+          <h3>Ошибка вывода сообщений</h3>
+          <div>{{ renderMessagesError }}</div>
         </div>
       </section>
 
@@ -561,6 +607,9 @@ const cacheRefreshing = ref(false);
 const userStatsRefreshing = ref(false);
 const cacheRefreshResult = ref(null);
 const userStatsRefreshResult = ref(null);
+const renderMessagesLoading = ref(false);
+const renderMessagesResult = ref(null);
+const renderMessagesError = ref(null);
 
 const channelSort = ref({ key: null, direction: "asc" });
 const userSort = ref({ key: null, direction: "asc" });
@@ -624,6 +673,17 @@ const formatCacheChannelLabel = (entry) => {
   return "Канал";
 };
 
+const formatSelectedChannelLabel = (channelId) => {
+  const entry = channelsForSelect.value.find((channel) => channel.id === channelId);
+  if (entry?.title) {
+    return entry.title;
+  }
+  if (channelId !== null && channelId !== undefined) {
+    return `Канал ${channelId}`;
+  }
+  return "Канал";
+};
+
 const formatDaysAgo = (days) =>
   days === 0 ? "сегодня" : `${days} дн. назад`;
 
@@ -648,6 +708,20 @@ const analysisRangeLabel = computed(() => {
 
 const rangeFromLabel = computed(() => formatDaysAgo(rangeEndDays.value));
 const rangeToLabel = computed(() => formatDaysAgo(rangeStartDays.value));
+const selectedChannelIdForMessages = computed(() => {
+  if (selectedChannelIds.value.length === 1) {
+    return selectedChannelIds.value[0];
+  }
+  return null;
+});
+const canRenderMessages = computed(() => selectedChannelIdForMessages.value !== null);
+const renderMessagesText = computed(() => {
+  const messages = renderMessagesResult.value?.messages;
+  if (!Array.isArray(messages)) {
+    return "";
+  }
+  return messages.join("\n");
+});
 
 const isHttpUrl = (value) =>
   typeof value === "string" && /^https?:\/\//i.test(value);
@@ -973,6 +1047,30 @@ const refreshCache = async () => {
   }
 };
 
+const renderMessages = async () => {
+  const channelId = selectedChannelIdForMessages.value;
+  if (!channelId) {
+    renderMessagesError.value = "Выберите один канал для вывода сообщений.";
+    renderMessagesResult.value = null;
+    return;
+  }
+  renderMessagesLoading.value = true;
+  renderMessagesError.value = null;
+  renderMessagesResult.value = null;
+  const dateFrom = getUtcStartDate(rangeEndDays.value).toISOString();
+  const dateTo = getUtcEndDate(rangeStartDays.value).toISOString();
+  const payload = { channel_id: channelId, date_from: dateFrom, date_to: dateTo };
+  try {
+    const { data } = await api.post("/channels/render-messages", payload);
+    renderMessagesResult.value = data;
+  } catch (error) {
+    const detail = error?.response?.data?.detail;
+    renderMessagesError.value = detail || error?.message || "Ошибка запроса.";
+  } finally {
+    renderMessagesLoading.value = false;
+  }
+};
+
 const refreshUserStats = async () => {
   userStatsRefreshing.value = true;
   userStatsRefreshResult.value = null;
@@ -986,6 +1084,11 @@ const refreshUserStats = async () => {
 
 const dismissCacheRefreshResult = () => {
   cacheRefreshResult.value = null;
+};
+
+const dismissRenderMessages = () => {
+  renderMessagesResult.value = null;
+  renderMessagesError.value = null;
 };
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -1374,6 +1477,45 @@ button:disabled {
 
 .cache-refresh-table {
   max-height: 240px;
+}
+
+.render-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.render-messages-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.render-messages-header h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.render-messages-summary {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.render-messages-body {
+  border: 1px solid #e6ecf5;
+  border-radius: 6px;
+  max-height: 260px;
+  overflow: auto;
+  background: #f9fafb;
+}
+
+.render-messages-content {
+  margin: 0;
+  padding: 8px;
+  white-space: pre-wrap;
+  font-family: "Courier New", monospace;
+  font-size: 11px;
 }
 
 .user-stats-refresh {
