@@ -413,7 +413,7 @@ class Mediator:
             return None
         username = usernames.get(user_id)
         if username:
-            return f'u{username}'
+            return f'@{username}'
         return f'u{user_id}'
 
     @staticmethod
