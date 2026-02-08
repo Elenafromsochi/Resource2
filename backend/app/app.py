@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from .api.channels import router as channels_router
 from .api.other import router as other_router
+from .api.prompts import router as prompts_router
 from .api.users import router as users_router
 from .config import API_ROOT_PATH
 from .config import APP_TITLE
@@ -60,5 +61,6 @@ app.add_middleware(
     allow_headers=['*'],
 )
 app.include_router(channels_router)
+app.include_router(prompts_router)
 app.include_router(users_router)
 app.include_router(other_router)

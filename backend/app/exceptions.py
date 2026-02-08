@@ -30,3 +30,7 @@ class EmptyChannelIdentifierError(AppException):
 
 class UserEntityTypeError(AppException):
     detail = 'Entity is not a user'
+
+
+class PromptNotFoundError(NotFoundError):
+    detail = 'Prompt is not found'
