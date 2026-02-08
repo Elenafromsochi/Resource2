@@ -211,6 +211,98 @@
       </section>
 
       <section class="block">
+        <h2>Промпты</h2>
+        <label class="field-label" for="prompt-title">Название</label>
+        <div class="row compact">
+          <div class="input-with-clear prompt-input">
+            <input
+              id="prompt-title"
+              v-model="promptTitle"
+              type="text"
+              placeholder="Название промпта"
+            />
+            <button
+              v-if="promptTitle"
+              type="button"
+              class="clear-button"
+              aria-label="Очистить название"
+              @click="promptTitle = ''"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+        <label class="field-label" for="prompt-text">Текст</label>
+        <textarea
+          id="prompt-text"
+          v-model="promptText"
+          class="prompt-textarea"
+          placeholder="Текст промпта"
+        ></textarea>
+        <div class="row compact prompt-actions">
+          <button
+            type="button"
+            :disabled="promptSaving || !canSavePrompt"
+            @click="savePrompt"
+          >
+            {{ isEditingPrompt ? "Сохранить" : "Добавить" }}
+          </button>
+          <button
+            v-if="isEditingPrompt"
+            type="button"
+            class="secondary-button"
+            :disabled="promptSaving"
+            @click="resetPromptForm"
+          >
+            Отменить
+          </button>
+        </div>
+        <div class="table-container prompt-table">
+          <table class="compact-table">
+            <thead>
+              <tr>
+                <th>Название</th>
+                <th>Текст</th>
+                <th class="actions">Действия</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="prompt in prompts" :key="prompt.id">
+                <td>{{ prompt.title }}</td>
+                <td>
+                  <pre class="prompt-text-preview">{{ prompt.text }}</pre>
+                </td>
+                <td class="actions prompt-actions-cell">
+                  <button
+                    type="button"
+                    class="secondary-button"
+                    :disabled="promptSaving"
+                    @click="startEditPrompt(prompt)"
+                  >
+                    Редактировать
+                  </button>
+                  <button
+                    type="button"
+                    class="danger-button"
+                    :disabled="promptDeletingId === prompt.id"
+                    @click="removePrompt(prompt.id)"
+                  >
+                    Удалить
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="promptsLoading">
+                <td colspan="3" class="muted">Загрузка...</td>
+              </tr>
+              <tr v-else-if="prompts.length === 0">
+                <td colspan="3" class="muted">Нет промптов</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="block">
         <h2>Каналы и группы</h2>
         <label class="field-label" for="channel-input">
           Добавить канал или группу
@@ -611,6 +703,14 @@ const renderMessagesLoading = ref(false);
 const renderMessagesResult = ref(null);
 const renderMessagesError = ref(null);
 
+const prompts = ref([]);
+const promptsLoading = ref(false);
+const promptSaving = ref(false);
+const promptDeletingId = ref(null);
+const editingPromptId = ref(null);
+const promptTitle = ref("");
+const promptText = ref("");
+
 const channelSort = ref({ key: null, direction: "asc" });
 const userSort = ref({ key: null, direction: "asc" });
 
@@ -721,6 +821,11 @@ const renderMessagesText = computed(() => {
     return "";
   }
   return messages.join("\n");
+});
+
+const isEditingPrompt = computed(() => editingPromptId.value !== null);
+const canSavePrompt = computed(() => {
+  return Boolean(promptTitle.value.trim() && promptText.value.trim());
 });
 
 const isHttpUrl = (value) =>
@@ -1001,6 +1106,69 @@ const fetchChannelsForSelect = async () => {
   channelsForSelect.value = data;
 };
 
+const fetchPrompts = async () => {
+  promptsLoading.value = true;
+  try {
+    const { data } = await api.get("/prompts");
+    prompts.value = Array.isArray(data) ? data : [];
+  } finally {
+    promptsLoading.value = false;
+  }
+};
+
+const resetPromptForm = () => {
+  editingPromptId.value = null;
+  promptTitle.value = "";
+  promptText.value = "";
+};
+
+const startEditPrompt = (prompt) => {
+  if (!prompt) {
+    return;
+  }
+  editingPromptId.value = prompt.id;
+  promptTitle.value = prompt.title || "";
+  promptText.value = prompt.text || "";
+};
+
+const savePrompt = async () => {
+  const title = promptTitle.value.trim();
+  const text = promptText.value.trim();
+  if (!title || !text) {
+    return;
+  }
+  promptSaving.value = true;
+  try {
+    if (isEditingPrompt.value) {
+      await api.put(`/prompts/${editingPromptId.value}`, { title, text });
+    } else {
+      await api.post("/prompts", { title, text });
+    }
+    await fetchPrompts();
+    resetPromptForm();
+  } finally {
+    promptSaving.value = false;
+  }
+};
+
+const removePrompt = async (promptId) => {
+  if (!window.confirm("Удалить промпт?")) {
+    return;
+  }
+  promptDeletingId.value = promptId;
+  try {
+    await api.delete(`/prompts/${promptId}`);
+    await fetchPrompts();
+    if (editingPromptId.value === promptId) {
+      resetPromptForm();
+    }
+  } finally {
+    if (promptDeletingId.value === promptId) {
+      promptDeletingId.value = null;
+    }
+  }
+};
+
 const addChannel = async () => {
   const value = newChannelValue.value.trim();
   if (!value) {
@@ -1166,6 +1334,7 @@ const onUsersScroll = (event) => {
 onMounted(async () => {
   await fetchChannels(true);
   await fetchChannelsForSelect();
+  await fetchPrompts();
   await fetchUsers(true);
 });
 </script>
@@ -1389,6 +1558,17 @@ input[type="date"] {
   font-size: 12px;
 }
 
+textarea {
+  padding: 5px 8px;
+  border: 1px solid #cbd2d9;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+}
+
 button {
   padding: 6px 10px;
   border: none;
@@ -1404,6 +1584,26 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.secondary-button {
+  background: #ffffff;
+  color: #1f2933;
+  border: 1px solid #cbd2d9;
+}
+
+.secondary-button:hover {
+  background: #f1f4f9;
+}
+
+.danger-button {
+  background: #fbe9e7;
+  color: #c0392b;
+  border: 1px solid #f4c6c0;
+}
+
+.danger-button:hover {
+  background: #f6d8d6;
+}
+
 .table-container {
   max-height: 380px;
   overflow-y: auto;
@@ -1414,6 +1614,42 @@ button:disabled {
 
 .analysis-table {
   max-height: 260px;
+}
+
+.prompt-input {
+  width: 100%;
+  max-width: 420px;
+}
+
+.prompt-input input {
+  width: 100%;
+}
+
+.prompt-textarea {
+  min-height: 140px;
+}
+
+.prompt-actions {
+  align-items: center;
+}
+
+.prompt-table {
+  max-height: 260px;
+}
+
+.prompt-text-preview {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: "Courier New", monospace;
+  font-size: 11px;
+  max-height: 110px;
+  overflow: auto;
+}
+
+.prompt-actions-cell {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .analysis-errors {
