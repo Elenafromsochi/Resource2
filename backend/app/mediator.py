@@ -137,8 +137,6 @@ class Mediator:
         date_to: datetime,
         channel_ids: list[int] | None = None,
     ) -> dict[str, Any]:
-        date_from = self._ensure_utc_datetime(date_from)
-        date_to = self._ensure_utc_datetime(date_to)
         if channel_ids:
             channels = await self.storage.channels.get_by_ids(channel_ids)
         else:
@@ -184,15 +182,13 @@ class Mediator:
                     entity,
                     offset_date=date_to,
                 ):
-                    message_date = self._ensure_utc_datetime(message.date)
-                    if message_date < date_from:
+                    if message.date < date_from:
                         break
                     message_data = message.to_dict()
                     if not message_data:
                         continue
-                    message_data['date'] = self._ensure_utc_datetime(
-                        message_data.get('date', message_date)
-                    )
+                    if message_data.get('date') is None:
+                        message_data['date'] = message.date
                     message_batch.append(message_data)
                     if len(message_batch) >= message_batch_size:
                         await flush_batch(channel_id, message_batch)
@@ -369,24 +365,6 @@ class Mediator:
         if text:
             parts.append(text)
         return ' '.join(parts).strip()
-
-    @staticmethod
-    def _ensure_utc_datetime(value: Any) -> datetime:
-        if isinstance(value, datetime):
-            if value.tzinfo is None:
-                return value.replace(tzinfo=timezone.utc)
-            return value
-        if isinstance(value, str):
-            try:
-                parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-            except ValueError as exc:
-                raise TypeError(
-                    f'Unsupported datetime value: {value!r}'
-                ) from exc
-            if parsed.tzinfo is None:
-                return parsed.replace(tzinfo=timezone.utc)
-            return parsed
-        raise TypeError(f'Unsupported datetime value type: {type(value).__name__}')
 
     @staticmethod
     def _format_message_time(value: Any) -> str | None:
