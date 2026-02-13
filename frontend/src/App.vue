@@ -1562,6 +1562,8 @@ button:disabled {
 
 .prompt-textarea {
   min-height: 140px;
+  box-sizing: border-box;
+  line-height: 1.45;
 }
 
 .prompt-actions {
@@ -1570,13 +1572,23 @@ button:disabled {
 
 .prompt-table {
   max-height: 260px;
+  overflow-x: auto;
 }
 
 .prompt-text-preview {
   margin: 0;
+  padding: 6px 8px;
+  border: 1px solid #e6ecf5;
+  border-radius: 6px;
+  background: #f8fafc;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.4;
   font-family: "Courier New", monospace;
   font-size: 11px;
+  max-width: 100%;
+  box-sizing: border-box;
   max-height: 110px;
   overflow: auto;
 }
