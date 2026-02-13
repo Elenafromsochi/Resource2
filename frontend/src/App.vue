@@ -651,7 +651,10 @@ const selectedChannelIds = ref([]);
 
 const analysisRangeMaxDays = ANALYSIS_RANGE_MAX_DAYS;
 const rangeStartDays = ref(0);
-const rangeEndDays = ref(analysisRangeMaxDays);
+const DEFAULT_ANALYSIS_LAST_DAYS = 3;
+const rangeEndDays = ref(
+  Math.min(analysisRangeMaxDays, DEFAULT_ANALYSIS_LAST_DAYS - 1),
+);
 const userListLoading = ref(false);
 const cacheRefreshing = ref(false);
 const userStatsRefreshing = ref(false);
