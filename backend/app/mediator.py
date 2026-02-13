@@ -375,7 +375,7 @@ class Mediator:
         if isinstance(value, datetime):
             if value.tzinfo is None:
                 return value.replace(tzinfo=timezone.utc)
-            return value.astimezone(timezone.utc)
+            return value
         if isinstance(value, str):
             try:
                 parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
@@ -385,7 +385,7 @@ class Mediator:
                 ) from exc
             if parsed.tzinfo is None:
                 return parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
+            return parsed
         raise TypeError(f'Unsupported datetime value type: {type(value).__name__}')
 
     @staticmethod
