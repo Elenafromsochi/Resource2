@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 
-MIGRATIONS_DIR = Path(__file__).resolve().parent / 'storage' / 'migrations'
+SCHEMA_SQL_PATH = Path(__file__).resolve().parent / 'storage' / 'schema.sql'
 
 APP_TITLE = 'Resource 2'
 API_ROOT_PATH = '/api'

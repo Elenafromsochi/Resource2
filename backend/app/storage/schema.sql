@@ -18,10 +18,15 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS channel_users (
-    channel_id BIGINT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    messages_count INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (channel_id, user_id)
+CREATE TABLE IF NOT EXISTS prompts (
+    id BIGSERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    text TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE users DROP COLUMN IF EXISTS messages_count;
+DROP INDEX IF EXISTS idx_users_activity;
+DROP TABLE IF EXISTS channel_users;
+DROP TABLE IF EXISTS migrations;

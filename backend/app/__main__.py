@@ -1,12 +1,9 @@
-import asyncio
 import logging
 
 import uvicorn
 from colorlog import ColoredFormatter
 
 from .app import app
-from .config import POSTGRES_URL
-from .utils import migrate
 
 
 handler = logging.StreamHandler()
@@ -25,5 +22,4 @@ logging.basicConfig(level=logging.DEBUG, handlers=[handler])
 logging.getLogger('telethon').setLevel(logging.INFO)
 logging.getLogger('pymongo').setLevel(logging.INFO)
 
-asyncio.run(migrate(POSTGRES_URL))
 uvicorn.run(app, host='0.0.0.0', port=8000)
