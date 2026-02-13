@@ -168,12 +168,13 @@ class Mediator:
             channel_stat['messages_updated'] += modified
 
         async def flush_batch(
+            channel_id: int,
             batch: list[dict[str, Any]],
             channel_stat: dict[str, Any],
         ) -> None:
             if not batch:
                 return
-            stats = await self.storage.messages.upsert_many(batch)
+            stats = await self.storage.messages.upsert_many(channel_id, batch)
             apply_upsert_stats(stats, channel_stat)
             batch.clear()
         for channel in channels:
@@ -199,8 +200,8 @@ class Mediator:
                         continue
                     message_batch.append(message_data)
                     if len(message_batch) >= message_batch_size:
-                        await flush_batch(message_batch, channel_stat)
-                await flush_batch(message_batch, channel_stat)
+                        await flush_batch(channel_id, message_batch, channel_stat)
+                await flush_batch(channel_id, message_batch, channel_stat)
             except Exception as exc:
                 errors.append(f'channel {channel_id}: {exc}')
             channel_stats.append(channel_stat)
