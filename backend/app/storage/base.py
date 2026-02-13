@@ -5,7 +5,7 @@ from app.config import DB_POOL_MAX
 from app.config import DB_POOL_MIN
 from app.config import MONGO_DB_NAME
 from app.config import MONGO_URL
-from app.config import PSQL_SCHEMA_PATH
+from app.config import POSTGRES_SCHEMA_PATH
 from app.config import POSTGRES_URL
 
 
@@ -20,7 +20,7 @@ class PostgresEngine:
             min_size=DB_POOL_MIN,
             max_size=DB_POOL_MAX,
         )
-        schema_sql = PSQL_SCHEMA_PATH.read_text(encoding='utf-8')
+        schema_sql = POSTGRES_SCHEMA_PATH.read_text(encoding='utf-8')
         async with self.pool.acquire() as conn:
             await conn.execute(schema_sql)
 
