@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 
-SQL_SCHEMA_PATH = Path(__file__).resolve().parent / 'storage' / 'schema.sql'
+PSQL_SCHEMA_PATH = Path(__file__).resolve().parent / 'storage' / 'schema.sql'
 
 APP_TITLE = 'Resource 2'
 API_ROOT_PATH = '/api'
