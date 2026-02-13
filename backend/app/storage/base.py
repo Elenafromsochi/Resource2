@@ -1,5 +1,3 @@
-from logging import getLogger
-
 import asyncpg
 from pymongo import AsyncMongoClient
 
@@ -8,23 +6,7 @@ from app.config import DB_POOL_MIN
 from app.config import MONGO_DB_NAME
 from app.config import MONGO_URL
 from app.config import POSTGRES_URL
-from app.config import SCHEMA_SQL_PATH
-
-
-logger = getLogger(__name__)
-
-
-async def initialize_postgres_schema(pool: asyncpg.Pool) -> None:
-    if not SCHEMA_SQL_PATH.exists():
-        raise FileNotFoundError(f'Postgres schema file not found: {SCHEMA_SQL_PATH}')
-
-    schema_sql = SCHEMA_SQL_PATH.read_text(encoding='utf-8').strip()
-    if not schema_sql:
-        logger.warning('Schema file is empty, skipping init: %s', SCHEMA_SQL_PATH)
-        return
-
-    async with pool.acquire() as conn:
-        await conn.execute(schema_sql)
+from app.config import SQL_SCHEMA_PATH
 
 
 class PostgresEngine:
@@ -38,7 +20,9 @@ class PostgresEngine:
             min_size=DB_POOL_MIN,
             max_size=DB_POOL_MAX,
         )
-        await initialize_postgres_schema(self.pool)
+        schema_sql = SQL_SCHEMA_PATH.read_text(encoding='utf-8')
+        async with self.pool.acquire() as conn:
+            await conn.execute(schema_sql)
 
     async def close(self):
         if self.pool:
