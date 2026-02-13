@@ -30,19 +30,16 @@ CREATE TABLE IF NOT EXISTS messages (
     channel_id BIGINT NOT NULL,
     message_id BIGINT NOT NULL,
     detail JSONB NOT NULL,
+    date TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (channel_id, message_id)
 );
 
-CREATE OR REPLACE FUNCTION try_parse_timestamptz(value TEXT)
-RETURNS TIMESTAMPTZ AS $$
-BEGIN
-    RETURN value::TIMESTAMPTZ;
-EXCEPTION WHEN OTHERS THEN
-    RETURN NULL;
-END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS date TIMESTAMPTZ;
+UPDATE messages
+SET date = (detail->>'date')::TIMESTAMPTZ
+WHERE date IS NULL;
 
 CREATE OR REPLACE FUNCTION messages_set_updated_at()
 RETURNS TRIGGER AS $$
@@ -63,8 +60,8 @@ FOR EACH ROW
 EXECUTE FUNCTION messages_set_updated_at();
 
 CREATE INDEX IF NOT EXISTS idx_messages_channel_id ON messages (channel_id);
-CREATE INDEX IF NOT EXISTS idx_messages_channel_date
-ON messages (channel_id, try_parse_timestamptz(detail->>'date'));
+DROP INDEX IF EXISTS idx_messages_channel_date;
+CREATE INDEX IF NOT EXISTS idx_messages_channel_date ON messages (channel_id, date);
 
 ALTER TABLE users DROP COLUMN IF EXISTS messages_count;
 DROP INDEX IF EXISTS idx_users_activity;
