@@ -44,10 +44,19 @@ class RenderMessagesRequest(BaseModel):
     date_to: datetime
 
 
+class RefreshMessagesChannelStat(BaseModel):
+    channel_id: int
+    channel_title: str | None = None
+    total: int
+    created: int
+    updated: int
+
+
 class RefreshMessagesResponse(BaseModel):
     total: int
     created: int
     updated: int
+    channels: list[RefreshMessagesChannelStat] = Field(default_factory=list)
 
 
 class RenderMessagesResponse(BaseModel):

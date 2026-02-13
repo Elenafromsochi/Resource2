@@ -147,35 +147,66 @@ class Mediator:
         messages_total = 0
         messages_created = 0
         messages_updated = 0
+        channel_stats: list[dict[str, Any]] = []
 
-        def apply_upsert_stats(stats: dict[str, int]) -> None:
-            processed = int(stats.get('processed', 0) or 0)
-            upserted = int(stats.get('upserted', 0) or 0)
-            modified = int(stats.get('modified', 0) or 0)
+        def to_count(value: Any) -> int:
+            normalized = self._safe_int(value)
+            return normalized if normalized is not None else 0
+
+        def apply_upsert_stats(stats: dict[str, int]) -> tuple[int, int, int]:
+            processed = to_count(stats.get('processed'))
+            upserted = to_count(stats.get('upserted'))
+            modified = to_count(stats.get('modified'))
             nonlocal messages_total
             nonlocal messages_created
             nonlocal messages_updated
             messages_total += processed
             messages_created += upserted
             messages_updated += modified
+            return processed, upserted, modified
 
-        async def flush_batch(
-            channel_id: int,
-            batch: list[dict[str, Any]],
-        ) -> None:
-            if not batch:
-                return
-            stats = await self.storage.messages.upsert_many(channel_id, batch)
-            apply_upsert_stats(stats)
-            batch.clear()
         for channel in channels:
-            channel_id = channel.get('id')
+            channel_id = self._safe_int(channel.get('id'))
+            if channel_id is None:
+                continue
+            channel_title = channel.get('title')
+            if channel_title is not None:
+                channel_title = str(channel_title)
+            channel_total = 0
+            channel_created = 0
+            channel_updated = 0
+
+            def apply_channel_upsert_stats(stats: dict[str, int]) -> None:
+                nonlocal channel_total
+                nonlocal channel_created
+                nonlocal channel_updated
+                processed, upserted, modified = apply_upsert_stats(stats)
+                channel_total += processed
+                channel_created += upserted
+                channel_updated += modified
+
+            async def flush_batch(batch: list[dict[str, Any]]) -> None:
+                if not batch:
+                    return
+                stats = await self.storage.messages.upsert_many(channel_id, batch)
+                apply_channel_upsert_stats(stats)
+                batch.clear()
+
             try:
                 entity = await self.resolve_channel_entity(channel)
             except Exception:
                 logger.exception(
                     'Failed to resolve channel entity for refresh (channel_id=%s)',
                     channel_id,
+                )
+                channel_stats.append(
+                    {
+                        'channel_id': channel_id,
+                        'channel_title': channel_title,
+                        'total': 0,
+                        'created': 0,
+                        'updated': 0,
+                    }
                 )
                 continue
             try:
@@ -195,18 +226,28 @@ class Mediator:
                     message_data['date'] = message.date
                     message_batch.append(message_data)
                     if len(message_batch) >= message_batch_size:
-                        await flush_batch(channel_id, message_batch)
-                await flush_batch(channel_id, message_batch)
+                        await flush_batch(message_batch)
+                await flush_batch(message_batch)
             except Exception:
                 logger.exception(
                     'Failed to refresh messages for channel (channel_id=%s)',
                     channel_id,
                 )
-                continue
+            channel_stats.append(
+                {
+                    'channel_id': channel_id,
+                    'channel_title': channel_title,
+                    'total': channel_total,
+                    'created': channel_created,
+                    'updated': channel_updated,
+                }
+            )
+        channel_stats.sort(key=lambda item: item['channel_id'])
         return {
             'total': messages_total,
             'created': messages_created,
             'updated': messages_updated,
+            'channels': channel_stats,
         }
 
     async def render_messages(
