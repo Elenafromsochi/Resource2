@@ -60,7 +60,6 @@ FOR EACH ROW
 EXECUTE FUNCTION messages_set_updated_at();
 
 CREATE INDEX IF NOT EXISTS idx_messages_channel_id ON messages (channel_id);
-DROP INDEX IF EXISTS idx_messages_channel_date;
 CREATE INDEX IF NOT EXISTS idx_messages_channel_date ON messages (channel_id, date);
 
 ALTER TABLE users DROP COLUMN IF EXISTS messages_count;
