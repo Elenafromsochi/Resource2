@@ -20,6 +20,7 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
     ports:
       - 8000:8000
+    restart: always
     depends_on:
       - postgres
 
@@ -29,6 +30,7 @@ services:
       VITE_API_URL: http://localhost:8000
     ports:
       - 5173:5173
+    restart: always
     depends_on:
       - backend
 
