@@ -52,7 +52,7 @@
               "
               @click="refreshCache"
             >
-              Обновить кэш
+              Выгрузка сообщений
             </button>
             <button
               type="button"
@@ -123,7 +123,7 @@
         </div>
         <div v-if="cacheRefreshResult" class="cache-refresh">
           <div class="cache-refresh-header">
-            <h3>Результат обновления кэша</h3>
+            <h3>Результат выгрузки сообщений</h3>
             <span class="cache-refresh-summary">
               Всего сообщений: {{ cacheRefreshResult.total }},
               добавлено: {{ cacheRefreshResult.created }},
@@ -132,7 +132,7 @@
             <button
               type="button"
               class="cache-refresh-close"
-              aria-label="Скрыть результат обновления кэша"
+              aria-label="Скрыть результат выгрузки сообщений"
               @click="dismissCacheRefreshResult"
             >
               Скрыть
