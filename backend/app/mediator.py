@@ -187,8 +187,7 @@ class Mediator:
                     message_data = message.to_dict()
                     if not message_data:
                         continue
-                    if message_data.get('date') is None:
-                        message_data['date'] = message.date
+                    message_data['date'] = message.date
                     message_batch.append(message_data)
                     if len(message_batch) >= message_batch_size:
                         await flush_batch(channel_id, message_batch)
