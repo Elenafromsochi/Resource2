@@ -55,6 +55,8 @@ def async_cache(func):
 
 
 class Mediator:
+    _DROP_PAYLOAD_VALUE = object()
+
     def __init__(self, telegram: Telegram, deepseek: DeepSeek, storage: Storage) -> None:
         self.telegram = telegram
         self.deepseek = deepseek
@@ -185,6 +187,9 @@ class Mediator:
                     if message.date < date_from:
                         break
                     message_data = message.to_dict()
+                    if not message_data:
+                        continue
+                    message_data = self._sanitize_message_payload(message_data)
                     if not message_data:
                         continue
                     message_data['date'] = message.date
@@ -424,6 +429,49 @@ class Mediator:
         text = str(value)
         text = ' '.join(text.splitlines())
         return text.strip()
+
+    @classmethod
+    def _sanitize_message_payload(cls, value: Any) -> Any:
+        if isinstance(value, dict):
+            cleaned: dict[Any, Any] = {}
+            for key, nested_value in value.items():
+                if cls._should_drop_message_key(key):
+                    continue
+                normalized_value = cls._sanitize_message_payload(nested_value)
+                if normalized_value is cls._DROP_PAYLOAD_VALUE:
+                    continue
+                cleaned[key] = normalized_value
+            return cleaned
+        if isinstance(value, list):
+            cleaned_items: list[Any] = []
+            for item in value:
+                normalized_value = cls._sanitize_message_payload(item)
+                if normalized_value is cls._DROP_PAYLOAD_VALUE:
+                    continue
+                cleaned_items.append(normalized_value)
+            return cleaned_items
+        if isinstance(value, tuple):
+            cleaned_items: list[Any] = []
+            for item in value:
+                normalized_value = cls._sanitize_message_payload(item)
+                if normalized_value is cls._DROP_PAYLOAD_VALUE:
+                    continue
+                cleaned_items.append(normalized_value)
+            return tuple(cleaned_items)
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            return cls._DROP_PAYLOAD_VALUE
+        return value
+
+    @staticmethod
+    def _should_drop_message_key(key: Any) -> bool:
+        if not isinstance(key, str):
+            return False
+        normalized = key.lower()
+        if 'file_reference' in normalized:
+            return True
+        if normalized == 'file_ref':
+            return True
+        return normalized.endswith('_file_ref')
 
     def _get_message_user_id(self, message: dict[str, Any]) -> int | None:
         from_id = message.get('from_id')
