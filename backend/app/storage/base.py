@@ -8,9 +8,23 @@ from app.config import DB_POOL_MIN
 from app.config import MONGO_DB_NAME
 from app.config import MONGO_URL
 from app.config import POSTGRES_URL
+from app.config import SCHEMA_SQL_PATH
 
 
 logger = getLogger(__name__)
+
+
+async def initialize_postgres_schema(pool: asyncpg.Pool) -> None:
+    if not SCHEMA_SQL_PATH.exists():
+        raise FileNotFoundError(f'Postgres schema file not found: {SCHEMA_SQL_PATH}')
+
+    schema_sql = SCHEMA_SQL_PATH.read_text(encoding='utf-8').strip()
+    if not schema_sql:
+        logger.warning('Schema file is empty, skipping init: %s', SCHEMA_SQL_PATH)
+        return
+
+    async with pool.acquire() as conn:
+        await conn.execute(schema_sql)
 
 
 class PostgresEngine:
@@ -24,9 +38,12 @@ class PostgresEngine:
             min_size=DB_POOL_MIN,
             max_size=DB_POOL_MAX,
         )
+        await initialize_postgres_schema(self.pool)
 
     async def close(self):
-        await self.pool.close()
+        if self.pool:
+            await self.pool.close()
+            self.pool = None
 
 
 class MongoEngine:
