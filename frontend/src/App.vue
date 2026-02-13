@@ -125,9 +125,9 @@
           <div class="cache-refresh-header">
             <h3>Результат обновления кэша</h3>
             <span class="cache-refresh-summary">
-              Каналов: {{ cacheRefreshResult.channels_processed }},
-              добавлено: {{ cacheRefreshResult.messages_upserted }},
-              обновлено: {{ cacheRefreshResult.messages_updated }}
+              Всего сообщений: {{ cacheRefreshResult.total }},
+              добавлено: {{ cacheRefreshResult.created }},
+              обновлено: {{ cacheRefreshResult.updated }}
             </span>
             <button
               type="button"
@@ -137,48 +137,6 @@
             >
               Скрыть
             </button>
-          </div>
-          <div class="table-container cache-refresh-table">
-            <table class="compact-table">
-              <thead>
-                <tr>
-                  <th>Канал</th>
-                  <th>Добавлено</th>
-                  <th>Обновлено</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="entry in cacheRefreshChannels" :key="entry.channel_id">
-                  <td>
-                    <div class="cache-channel-title">
-                      {{ formatCacheChannelLabel(entry) }}
-                    </div>
-                    <div class="cache-channel-meta">
-                      ID: {{ entry.channel_id }}
-                      <span v-if="entry.channel_username">
-                        · @{{ entry.channel_username }}
-                      </span>
-                    </div>
-                  </td>
-                  <td>{{ entry.messages_upserted }}</td>
-                  <td>{{ entry.messages_updated }}</td>
-                </tr>
-                <tr v-if="cacheRefreshChannels.length === 0">
-                  <td colspan="3" class="muted">Нет данных</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-          <div
-            v-if="cacheRefreshResult.errors && cacheRefreshResult.errors.length"
-            class="analysis-errors"
-          >
-            <h3>Ошибки обновления кэша</h3>
-            <ul>
-              <li v-for="(error, index) in cacheRefreshResult.errors" :key="index">
-                {{ error }}
-              </li>
-            </ul>
           </div>
         </div>
         <div v-if="renderMessagesLoading" class="muted">
@@ -763,16 +721,6 @@ const formatUserChannelMessages = (user) => {
   return `${total} (${perChannel})`;
 };
 
-const formatCacheChannelLabel = (entry) => {
-  if (entry?.channel_title) {
-    return entry.channel_title;
-  }
-  if (entry?.channel_id !== null && entry?.channel_id !== undefined) {
-    return `Канал ${entry.channel_id}`;
-  }
-  return "Канал";
-};
-
 const formatSelectedChannelLabel = (channelId) => {
   const entry = channelsForSelect.value.find((channel) => channel.id === channelId);
   if (entry?.title) {
@@ -983,22 +931,6 @@ const sortedChannelsForSelect = computed(() => {
   return [...channelsForSelect.value].sort((a, b) =>
     collator.compare(a.title || "", b.title || ""),
   );
-});
-
-const cacheRefreshChannels = computed(() => {
-  const channels = cacheRefreshResult.value?.channels;
-  if (!Array.isArray(channels)) {
-    return [];
-  }
-  return [...channels].sort((a, b) => {
-    const titleA = a.channel_title || "";
-    const titleB = b.channel_title || "";
-    const titleCompare = collator.compare(titleA, titleB);
-    if (titleCompare !== 0) {
-      return titleCompare;
-    }
-    return (a.channel_id ?? 0) - (b.channel_id ?? 0);
-  });
 });
 
 const fetchChannels = async (reset = false) => {

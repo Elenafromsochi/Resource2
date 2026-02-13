@@ -138,55 +138,37 @@ class Mediator:
             channels = await self.storage.channels.get_by_ids(channel_ids)
         else:
             channels = await self.storage.channels.list_all()
-        errors: list[str] = []
         message_batch_size = 200
-        channels_processed = 0
-        messages_upserted = 0
+        messages_total = 0
+        messages_created = 0
         messages_updated = 0
-        channel_stats: list[dict[str, Any]] = []
 
-        def init_channel_stats(channel: dict[str, Any]) -> dict[str, Any]:
-            return {
-                'channel_id': channel.get('id'),
-                'channel_title': channel.get('title') or 'Untitled',
-                'channel_username': channel.get('username'),
-                'messages_upserted': 0,
-                'messages_updated': 0,
-            }
-
-        def apply_upsert_stats(
-            stats: dict[str, int],
-            channel_stat: dict[str, Any],
-        ) -> None:
+        def apply_upsert_stats(stats: dict[str, int]) -> None:
+            processed = int(stats.get('processed', 0) or 0)
             upserted = int(stats.get('upserted', 0) or 0)
             modified = int(stats.get('modified', 0) or 0)
-            nonlocal messages_upserted
+            nonlocal messages_total
+            nonlocal messages_created
             nonlocal messages_updated
-            messages_upserted += upserted
+            messages_total += processed
+            messages_created += upserted
             messages_updated += modified
-            channel_stat['messages_upserted'] += upserted
-            channel_stat['messages_updated'] += modified
 
         async def flush_batch(
             channel_id: int,
             batch: list[dict[str, Any]],
-            channel_stat: dict[str, Any],
         ) -> None:
             if not batch:
                 return
             stats = await self.storage.messages.upsert_many(channel_id, batch)
-            apply_upsert_stats(stats, channel_stat)
+            apply_upsert_stats(stats)
             batch.clear()
         for channel in channels:
-            channel_stat = init_channel_stats(channel)
-            channel_id = channel_stat['channel_id']
+            channel_id = channel.get('id')
             try:
                 entity = await self.resolve_channel_entity(channel)
-            except Exception as exc:
-                errors.append(f'channel {channel_id}: {exc}')
-                channel_stats.append(channel_stat)
+            except Exception:
                 continue
-            channels_processed += 1
             try:
                 message_batch: list[dict[str, Any]] = []
                 async for message in self.telegram.client.iter_messages(
@@ -200,17 +182,14 @@ class Mediator:
                         continue
                     message_batch.append(message_data)
                     if len(message_batch) >= message_batch_size:
-                        await flush_batch(channel_id, message_batch, channel_stat)
-                await flush_batch(channel_id, message_batch, channel_stat)
-            except Exception as exc:
-                errors.append(f'channel {channel_id}: {exc}')
-            channel_stats.append(channel_stat)
+                        await flush_batch(channel_id, message_batch)
+                await flush_batch(channel_id, message_batch)
+            except Exception:
+                continue
         return {
-            'channels_processed': channels_processed,
-            'messages_upserted': messages_upserted,
-            'messages_updated': messages_updated,
-            'channels': channel_stats,
-            'errors': errors,
+            'total': messages_total,
+            'created': messages_created,
+            'updated': messages_updated,
         }
 
     async def render_messages(
