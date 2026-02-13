@@ -138,6 +138,37 @@
               Скрыть
             </button>
           </div>
+          <div v-if="cacheRefreshChannels.length > 0" class="table-container cache-refresh-table">
+            <table class="compact-table">
+              <thead>
+                <tr>
+                  <th>Канал</th>
+                  <th>Всего</th>
+                  <th>Добавлено</th>
+                  <th>Обновлено</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="channelStat in cacheRefreshChannels"
+                  :key="channelStat.channel_id"
+                >
+                  <td>
+                    <div class="cache-channel-title">
+                      {{
+                        channelStat.channel_title ||
+                        formatSelectedChannelLabel(channelStat.channel_id)
+                      }}
+                    </div>
+                    <div class="cache-channel-meta">ID: {{ channelStat.channel_id }}</div>
+                  </td>
+                  <td>{{ channelStat.total }}</td>
+                  <td>{{ channelStat.created }}</td>
+                  <td>{{ channelStat.updated }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
         <div v-if="renderMessagesLoading" class="muted">
           Загрузка сообщений...
@@ -735,6 +766,14 @@ const formatSelectedChannelLabel = (channelId) => {
   return "Канал";
 };
 
+const toCount = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  return Math.trunc(numeric);
+};
+
 const formatDaysAgo = (days) =>
   days === 0 ? "сегодня" : `${days} дн. назад`;
 
@@ -766,6 +805,28 @@ const selectedChannelIdForMessages = computed(() => {
   return null;
 });
 const canRenderMessages = computed(() => selectedChannelIdForMessages.value !== null);
+const cacheRefreshChannels = computed(() => {
+  const channels = cacheRefreshResult.value?.channels;
+  if (!Array.isArray(channels)) {
+    return [];
+  }
+  return [...channels]
+    .map((entry) => ({
+      channel_id: toCount(entry?.channel_id),
+      channel_title:
+        typeof entry?.channel_title === "string" ? entry.channel_title : null,
+      total: toCount(entry?.total),
+      created: toCount(entry?.created),
+      updated: toCount(entry?.updated),
+    }))
+    .sort((a, b) => {
+      const totalDiff = b.total - a.total;
+      if (totalDiff !== 0) {
+        return totalDiff;
+      }
+      return a.channel_id - b.channel_id;
+    });
+});
 const renderMessagesText = computed(() => {
   const messages = renderMessagesResult.value?.messages;
   if (!Array.isArray(messages)) {
