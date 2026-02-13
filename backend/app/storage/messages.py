@@ -92,8 +92,8 @@ class MessagesRepository(BaseRepository):
             SELECT channel_id, message_id, detail
             FROM messages
             WHERE channel_id = $1
-              AND try_parse_timestamptz(detail->>'date') BETWEEN $2 AND $3
-            ORDER BY try_parse_timestamptz(detail->>'date') ASC, message_id ASC
+              AND date BETWEEN $2 AND $3
+            ORDER BY date ASC, message_id ASC
             """,
             normalized_channel_id,
             normalized_date_from,
@@ -118,7 +118,7 @@ class MessagesRepository(BaseRepository):
             FROM messages
             WHERE channel_id = $1
               AND message_id = ANY($2::BIGINT[])
-            ORDER BY try_parse_timestamptz(detail->>'date') ASC NULLS FIRST, message_id ASC
+            ORDER BY date ASC NULLS FIRST, message_id ASC
             """,
             normalized_channel_id,
             normalized,
@@ -167,7 +167,6 @@ class MessagesRepository(BaseRepository):
 
         normalized_by_id: dict[int, dict[str, Any]] = {}
         skipped = 0
-        valid = 0
         for message in messages:
             if not isinstance(message, dict):
                 skipped += 1
@@ -176,7 +175,6 @@ class MessagesRepository(BaseRepository):
             if message_id is None:
                 skipped += 1
                 continue
-            valid += 1
             normalized_by_id[message_id] = self._normalize_message_detail(
                 message,
                 message_id,
@@ -186,7 +184,7 @@ class MessagesRepository(BaseRepository):
             return {'processed': 0, 'upserted': 0, 'modified': 0, 'skipped': skipped}
 
         processed = len(normalized_by_id)
-        skipped += max(valid - processed, 0)
+        skipped += max(len(messages) - skipped - processed, 0)
         message_ids = list(normalized_by_id.keys())
         channel_ids = [normalized_channel_id] * processed
         details_json = [
@@ -201,18 +199,24 @@ class MessagesRepository(BaseRepository):
         rows = await self.pool.fetch(
             """
             WITH payload AS (
-                SELECT *
+                SELECT
+                    channel_id,
+                    message_id,
+                    detail_text::JSONB AS detail,
+                    (detail_text::JSONB->>'date')::TIMESTAMPTZ AS date
                 FROM unnest(
                     $1::BIGINT[],
                     $2::BIGINT[],
                     $3::TEXT[]
                 ) AS value(channel_id, message_id, detail_text)
             )
-            INSERT INTO messages (channel_id, message_id, detail)
-            SELECT channel_id, message_id, detail_text::JSONB
+            INSERT INTO messages (channel_id, message_id, detail, date)
+            SELECT channel_id, message_id, detail, date
             FROM payload
             ON CONFLICT (channel_id, message_id)
-            DO UPDATE SET detail = EXCLUDED.detail
+            DO UPDATE SET
+                detail = EXCLUDED.detail,
+                date = EXCLUDED.date
             WHERE messages.detail IS DISTINCT FROM EXCLUDED.detail
             RETURNING (xmax = 0) AS inserted
             """,
