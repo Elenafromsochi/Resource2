@@ -1,7 +1,4 @@
-import json
-from datetime import date
 from datetime import datetime
-from datetime import timezone
 from typing import Any
 
 from .base import BaseRepository
@@ -16,51 +13,6 @@ class MessagesRepository(BaseRepository):
             return int(value)
         except (TypeError, ValueError):
             return None
-
-    @staticmethod
-    def _to_utc_datetime(value: datetime) -> datetime:
-        if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
-
-    @classmethod
-    def _to_json_compatible(cls, value: Any) -> Any:
-        if value is None or isinstance(value, (str, int, float, bool)):
-            return value
-        if isinstance(value, datetime):
-            return cls._to_utc_datetime(value).isoformat()
-        if isinstance(value, date):
-            return value.isoformat()
-        if isinstance(value, dict):
-            return {str(key): cls._to_json_compatible(item) for key, item in value.items()}
-        if isinstance(value, (list, tuple, set)):
-            return [cls._to_json_compatible(item) for item in value]
-        return str(value)
-
-    @classmethod
-    def _normalize_message_detail(
-        cls,
-        message: dict[str, Any],
-        message_id: int,
-    ) -> dict[str, Any]:
-        normalized = cls._to_json_compatible(message)
-        if not isinstance(normalized, dict):
-            normalized = {'value': normalized}
-        normalized['id'] = message_id
-        return normalized
-
-    @staticmethod
-    def _decode_detail(value: Any) -> dict[str, Any]:
-        if isinstance(value, dict):
-            return value
-        if isinstance(value, str):
-            try:
-                parsed = json.loads(value)
-            except json.JSONDecodeError:
-                return {}
-            if isinstance(parsed, dict):
-                return parsed
-        return {}
 
     @staticmethod
     def _normalize_message_ids(message_ids: list[int] | None) -> list[int]:
@@ -85,8 +37,6 @@ class MessagesRepository(BaseRepository):
         normalized_channel_id = self._safe_int(channel_id)
         if normalized_channel_id is None:
             return []
-        normalized_date_from = self._to_utc_datetime(date_from)
-        normalized_date_to = self._to_utc_datetime(date_to)
         rows = await self.pool.fetch(
             """
             SELECT channel_id, message_id, detail
@@ -96,8 +46,8 @@ class MessagesRepository(BaseRepository):
             ORDER BY date ASC, message_id ASC
             """,
             normalized_channel_id,
-            normalized_date_from,
-            normalized_date_to,
+            date_from,
+            date_to,
         )
         return self._rows_to_details(rows)
 
@@ -142,8 +92,8 @@ class MessagesRepository(BaseRepository):
     def _rows_to_details(self, rows: list[Any]) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         for row in rows:
-            detail = self._decode_detail(row['detail'])
-            if self._safe_int(detail.get('id')) is None:
+            detail = dict(row['detail'])
+            if detail.get('id') is None:
                 detail['id'] = row['message_id']
             items.append(detail)
         return items
@@ -172,13 +122,13 @@ class MessagesRepository(BaseRepository):
                 skipped += 1
                 continue
             message_id = self._safe_int(message.get('id'))
-            if message_id is None:
+            message_date = message.get('date')
+            if message_id is None or message_date is None:
                 skipped += 1
                 continue
-            normalized_by_id[message_id] = self._normalize_message_detail(
-                message,
-                message_id,
-            )
+            payload = dict(message)
+            payload['id'] = message_id
+            normalized_by_id[message_id] = payload
 
         if not normalized_by_id:
             return {'processed': 0, 'upserted': 0, 'modified': 0, 'skipped': skipped}
@@ -187,28 +137,19 @@ class MessagesRepository(BaseRepository):
         skipped += max(len(messages) - skipped - processed, 0)
         message_ids = list(normalized_by_id.keys())
         channel_ids = [normalized_channel_id] * processed
-        details_json = [
-            json.dumps(
-                normalized_by_id[message_id],
-                ensure_ascii=False,
-                separators=(',', ':'),
-            )
-            for message_id in message_ids
-        ]
+        details = [normalized_by_id[message_id] for message_id in message_ids]
+        dates = [normalized_by_id[message_id]['date'] for message_id in message_ids]
 
         rows = await self.pool.fetch(
             """
             WITH payload AS (
-                SELECT
-                    channel_id,
-                    message_id,
-                    detail_text::JSONB AS detail,
-                    (detail_text::JSONB->>'date')::TIMESTAMPTZ AS date
+                SELECT *
                 FROM unnest(
                     $1::BIGINT[],
                     $2::BIGINT[],
-                    $3::TEXT[]
-                ) AS value(channel_id, message_id, detail_text)
+                    $3::JSONB[],
+                    $4::TIMESTAMPTZ[]
+                ) AS value(channel_id, message_id, detail, date)
             )
             INSERT INTO messages (channel_id, message_id, detail, date)
             SELECT channel_id, message_id, detail, date
@@ -222,7 +163,8 @@ class MessagesRepository(BaseRepository):
             """,
             channel_ids,
             message_ids,
-            details_json,
+            details,
+            dates,
         )
         upserted = sum(1 for row in rows if row['inserted'])
         modified = len(rows) - upserted
@@ -293,27 +235,14 @@ class MessagesRepository(BaseRepository):
             total = self._safe_int(row['total']) or 0
             if user_id is None:
                 continue
-            channels_raw = row['channels']
-            if isinstance(channels_raw, str):
-                try:
-                    channels_raw = json.loads(channels_raw)
-                except json.JSONDecodeError:
-                    channels_raw = []
             channels: list[dict[str, int]] = []
-            if isinstance(channels_raw, list):
-                for entry in channels_raw:
-                    if not isinstance(entry, dict):
-                        continue
-                    channel_id = self._safe_int(entry.get('channel_id'))
-                    messages_count = self._safe_int(entry.get('messages_count'))
-                    if channel_id is None or messages_count is None:
-                        continue
-                    channels.append(
-                        {
-                            'channel_id': channel_id,
-                            'messages_count': messages_count,
-                        }
-                    )
+            for entry in row['channels']:
+                channels.append(
+                    {
+                        'channel_id': int(entry['channel_id']),
+                        'messages_count': int(entry['messages_count']),
+                    }
+                )
             result.append({'user_id': user_id, 'total': total, 'channels': channels})
         return result
 
