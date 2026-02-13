@@ -1,143 +1,66 @@
+import json
+from datetime import date
 from datetime import datetime
+from datetime import timezone
 from typing import Any
 
-from pymongo import UpdateOne
-
-from .base import BaseMongoRepository
+from .base import BaseRepository
 
 
-class MessagesRepository(BaseMongoRepository):
-    collection_name = 'messages'
+class MessagesRepository(BaseRepository):
+    @staticmethod
+    def _safe_int(value: Any) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
 
-    @property
-    def collection(self):
-        return self.db[self.collection_name]
+    @staticmethod
+    def _to_utc_datetime(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
-    def _build_identity_filter(self, message: dict) -> dict[str, Any]:
-        message_id = message.get('id')
-        if message_id is None:
-            return {}
-        peer_id = message.get('peer_id')
-        filter_doc: dict[str, Any] = {'id': message_id}
-        if isinstance(peer_id, dict):
-            if 'channel_id' in peer_id:
-                filter_doc['peer_id.channel_id'] = peer_id.get('channel_id')
-            elif 'chat_id' in peer_id:
-                filter_doc['peer_id.chat_id'] = peer_id.get('chat_id')
-            elif 'user_id' in peer_id:
-                filter_doc['peer_id.user_id'] = peer_id.get('user_id')
-            else:
-                filter_doc['peer_id'] = peer_id
-            return filter_doc
-        filter_doc['peer_id'] = peer_id
-        return filter_doc
+    @classmethod
+    def _to_json_compatible(cls, value: Any) -> Any:
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, datetime):
+            return cls._to_utc_datetime(value).isoformat()
+        if isinstance(value, date):
+            return value.isoformat()
+        if isinstance(value, dict):
+            return {str(key): cls._to_json_compatible(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple, set)):
+            return [cls._to_json_compatible(item) for item in value]
+        return str(value)
 
-    async def upsert_many(self, messages: list[dict]) -> dict[str, int]:
-        if not messages:
-            return {'processed': 0, 'upserted': 0, 'modified': 0, 'skipped': 0}
-        operations: list[UpdateOne] = []
-        skipped = 0
-        for message in messages:
-            filter_doc = self._build_identity_filter(message)
-            if not filter_doc:
-                skipped += 1
-                continue
-            operations.append(
-                UpdateOne(
-                    filter_doc,
-                    {'$set': message},
-                    upsert=True,
-                )
-            )
-        if not operations:
-            return {
-                'processed': 0,
-                'upserted': 0,
-                'modified': 0,
-                'skipped': skipped,
-            }
-        result = await self.collection.bulk_write(
-            operations,
-            ordered=False,
-        )
-        return {
-            'processed': len(operations),
-            'upserted': result.upserted_count,
-            'modified': result.modified_count,
-            'skipped': skipped,
-        }
+    @classmethod
+    def _normalize_message_detail(
+        cls,
+        message: dict[str, Any],
+        message_id: int,
+    ) -> dict[str, Any]:
+        normalized = cls._to_json_compatible(message)
+        if not isinstance(normalized, dict):
+            normalized = {'value': normalized}
+        normalized['id'] = message_id
+        return normalized
 
-    async def list_by_channel_and_date(
-        self,
-        channel_id: int,
-        date_from: datetime,
-        date_to: datetime,
-    ) -> list[dict[str, Any]]:
-        if channel_id is None:
-            return []
-        filter_doc: dict[str, Any] = {
-            'date': {'$gte': date_from, '$lte': date_to},
-            '$or': [
-                {'peer_id.channel_id': channel_id},
-                {'peer_id.chat_id': channel_id},
-            ],
-        }
-        cursor = self.collection.find(filter_doc).sort([('date', 1), ('id', 1)])
-        return [doc async for doc in cursor]
-
-    async def list_by_channel_and_ids(
-        self,
-        channel_id: int,
-        message_ids: list[int],
-    ) -> list[dict[str, Any]]:
-        if channel_id is None:
-            return []
-        normalized: list[int] = []
-        for message_id in message_ids or []:
-            if message_id is None:
-                continue
+    @staticmethod
+    def _decode_detail(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
             try:
-                normalized.append(int(message_id))
-            except (TypeError, ValueError):
-                continue
-        if not normalized:
-            return []
-        filter_doc: dict[str, Any] = {
-            'id': {'$in': normalized},
-            '$or': [
-                {'peer_id.channel_id': channel_id},
-                {'peer_id.chat_id': channel_id},
-            ],
-        }
-        cursor = self.collection.find(filter_doc).sort([('date', 1), ('id', 1)])
-        return [doc async for doc in cursor]
-
-    async def list_by_channel_and_ids(
-        self,
-        channel_id: int,
-        message_ids: list[int],
-    ) -> list[dict[str, Any]]:
-        if channel_id is None or not message_ids:
-            return []
-        normalized: list[int] = []
-        for message_id in message_ids:
-            if message_id is None:
-                continue
-            try:
-                normalized.append(int(message_id))
-            except (TypeError, ValueError):
-                continue
-        if not normalized:
-            return []
-        filter_doc: dict[str, Any] = {
-            'id': {'$in': normalized},
-            '$or': [
-                {'peer_id.channel_id': channel_id},
-                {'peer_id.chat_id': channel_id},
-            ],
-        }
-        cursor = self.collection.find(filter_doc).sort([('date', 1), ('id', 1)])
-        return [doc async for doc in cursor]
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+            if isinstance(parsed, dict):
+                return parsed
+        return {}
 
     @staticmethod
     def _normalize_message_ids(message_ids: list[int] | None) -> list[int]:
@@ -153,25 +76,54 @@ class MessagesRepository(BaseMongoRepository):
                 continue
         return normalized
 
+    async def list_by_channel_and_date(
+        self,
+        channel_id: int,
+        date_from: datetime,
+        date_to: datetime,
+    ) -> list[dict[str, Any]]:
+        normalized_channel_id = self._safe_int(channel_id)
+        if normalized_channel_id is None:
+            return []
+        normalized_date_from = self._to_utc_datetime(date_from)
+        normalized_date_to = self._to_utc_datetime(date_to)
+        rows = await self.pool.fetch(
+            """
+            SELECT channel_id, message_id, detail
+            FROM messages
+            WHERE channel_id = $1
+              AND try_parse_timestamptz(detail->>'date') BETWEEN $2 AND $3
+            ORDER BY try_parse_timestamptz(detail->>'date') ASC, message_id ASC
+            """,
+            normalized_channel_id,
+            normalized_date_from,
+            normalized_date_to,
+        )
+        return self._rows_to_details(rows)
+
     async def list_by_channel_and_ids(
         self,
         channel_id: int,
         message_ids: list[int],
     ) -> list[dict[str, Any]]:
-        if channel_id is None:
+        normalized_channel_id = self._safe_int(channel_id)
+        if normalized_channel_id is None:
             return []
         normalized = self._normalize_message_ids(message_ids)
         if not normalized:
             return []
-        filter_doc: dict[str, Any] = {
-            'id': {'$in': normalized},
-            '$or': [
-                {'peer_id.channel_id': channel_id},
-                {'peer_id.chat_id': channel_id},
-            ],
-        }
-        cursor = self.collection.find(filter_doc).sort([('date', 1), ('id', 1)])
-        return [doc async for doc in cursor]
+        rows = await self.pool.fetch(
+            """
+            SELECT channel_id, message_id, detail
+            FROM messages
+            WHERE channel_id = $1
+              AND message_id = ANY($2::BIGINT[])
+            ORDER BY try_parse_timestamptz(detail->>'date') ASC NULLS FIRST, message_id ASC
+            """,
+            normalized_channel_id,
+            normalized,
+        )
+        return self._rows_to_details(rows)
 
     @staticmethod
     def _normalize_user_ids(user_ids: list[int] | None) -> list[int]:
@@ -187,71 +139,182 @@ class MessagesRepository(BaseMongoRepository):
                 continue
         return normalized
 
-    def _build_user_message_stats_pipeline(
+    def _rows_to_details(self, rows: list[Any]) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for row in rows:
+            detail = self._decode_detail(row['detail'])
+            if self._safe_int(detail.get('id')) is None:
+                detail['id'] = row['message_id']
+            items.append(detail)
+        return items
+
+    async def upsert_many(
+        self,
+        channel_id: int,
+        messages: list[dict[str, Any]],
+    ) -> dict[str, int]:
+        if not messages:
+            return {'processed': 0, 'upserted': 0, 'modified': 0, 'skipped': 0}
+
+        normalized_channel_id = self._safe_int(channel_id)
+        if normalized_channel_id is None:
+            return {
+                'processed': 0,
+                'upserted': 0,
+                'modified': 0,
+                'skipped': len(messages),
+            }
+
+        normalized_by_id: dict[int, dict[str, Any]] = {}
+        skipped = 0
+        valid = 0
+        for message in messages:
+            if not isinstance(message, dict):
+                skipped += 1
+                continue
+            message_id = self._safe_int(message.get('id'))
+            if message_id is None:
+                skipped += 1
+                continue
+            valid += 1
+            normalized_by_id[message_id] = self._normalize_message_detail(
+                message,
+                message_id,
+            )
+
+        if not normalized_by_id:
+            return {'processed': 0, 'upserted': 0, 'modified': 0, 'skipped': skipped}
+
+        processed = len(normalized_by_id)
+        skipped += max(valid - processed, 0)
+        message_ids = list(normalized_by_id.keys())
+        channel_ids = [normalized_channel_id] * processed
+        details_json = [
+            json.dumps(
+                normalized_by_id[message_id],
+                ensure_ascii=False,
+                separators=(',', ':'),
+            )
+            for message_id in message_ids
+        ]
+
+        rows = await self.pool.fetch(
+            """
+            WITH payload AS (
+                SELECT *
+                FROM unnest(
+                    $1::BIGINT[],
+                    $2::BIGINT[],
+                    $3::TEXT[]
+                ) AS value(channel_id, message_id, detail_text)
+            )
+            INSERT INTO messages (channel_id, message_id, detail)
+            SELECT channel_id, message_id, detail_text::JSONB
+            FROM payload
+            ON CONFLICT (channel_id, message_id)
+            DO UPDATE SET detail = EXCLUDED.detail
+            WHERE messages.detail IS DISTINCT FROM EXCLUDED.detail
+            RETURNING (xmax = 0) AS inserted
+            """,
+            channel_ids,
+            message_ids,
+            details_json,
+        )
+        upserted = sum(1 for row in rows if row['inserted'])
+        modified = len(rows) - upserted
+        return {
+            'processed': processed,
+            'upserted': upserted,
+            'modified': modified,
+            'skipped': skipped,
+        }
+
+    async def _aggregate_user_message_stats(
         self,
         user_ids: list[int] | None = None,
     ) -> list[dict[str, Any]]:
-        match_doc: dict[str, Any] = {
-            'channel_id': {'$ne': None},
-            '$expr': {'$ne': ['$sender_id', '$channel_id']},
-        }
-        if user_ids:
-            match_doc['sender_id'] = {'$in': user_ids}
-        else:
-            match_doc['sender_id'] = {'$ne': None}
-        return [
-            {
-                '$project': {
-                    'sender_id': {
-                        '$ifNull': [
-                            '$from_id.user_id',
-                            '$sender_id',
-                        ]
-                    },
-                    'channel_id': {
-                        '$ifNull': [
-                            '$peer_id.channel_id',
-                            '$peer_id.chat_id',
-                        ]
-                    },
-                }
-            },
-            {'$match': match_doc},
-            {
-                '$group': {
-                    '_id': {
-                        'user_id': '$sender_id',
-                        'channel_id': '$channel_id',
-                    },
-                    'messages_count': {'$sum': 1},
-                }
-            },
-            {
-                '$group': {
-                    '_id': '$_id.user_id',
-                    'total': {'$sum': '$messages_count'},
-                    'channels': {
-                        '$push': {
-                            'channel_id': '$_id.channel_id',
-                            'messages_count': '$messages_count',
+        rows = await self.pool.fetch(
+            """
+            WITH extracted AS (
+                SELECT
+                    channel_id,
+                    CASE
+                        WHEN COALESCE(detail->'from_id'->>'user_id', '') ~ '^-?\\d+$' THEN
+                            (detail->'from_id'->>'user_id')::BIGINT
+                        WHEN COALESCE(detail->>'sender_id', '') ~ '^-?\\d+$' THEN
+                            (detail->>'sender_id')::BIGINT
+                        ELSE NULL
+                    END AS sender_id
+                FROM messages
+            ),
+            filtered AS (
+                SELECT channel_id, sender_id
+                FROM extracted
+                WHERE sender_id IS NOT NULL
+                  AND sender_id <> channel_id
+                  AND ($1::BIGINT[] IS NULL OR sender_id = ANY($1::BIGINT[]))
+            ),
+            by_channel AS (
+                SELECT
+                    sender_id AS user_id,
+                    channel_id,
+                    COUNT(*)::BIGINT AS messages_count
+                FROM filtered
+                GROUP BY sender_id, channel_id
+            )
+            SELECT
+                user_id,
+                SUM(messages_count)::BIGINT AS total,
+                COALESCE(
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'channel_id',
+                            channel_id,
+                            'messages_count',
+                            messages_count
+                        )
+                        ORDER BY channel_id
+                    ),
+                    '[]'::JSONB
+                ) AS channels
+            FROM by_channel
+            GROUP BY user_id
+            ORDER BY user_id
+            """,
+            user_ids,
+        )
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            user_id = self._safe_int(row['user_id'])
+            total = self._safe_int(row['total']) or 0
+            if user_id is None:
+                continue
+            channels_raw = row['channels']
+            if isinstance(channels_raw, str):
+                try:
+                    channels_raw = json.loads(channels_raw)
+                except json.JSONDecodeError:
+                    channels_raw = []
+            channels: list[dict[str, int]] = []
+            if isinstance(channels_raw, list):
+                for entry in channels_raw:
+                    if not isinstance(entry, dict):
+                        continue
+                    channel_id = self._safe_int(entry.get('channel_id'))
+                    messages_count = self._safe_int(entry.get('messages_count'))
+                    if channel_id is None or messages_count is None:
+                        continue
+                    channels.append(
+                        {
+                            'channel_id': channel_id,
+                            'messages_count': messages_count,
                         }
-                    },
-                }
-            },
-            {
-                '$project': {
-                    '_id': 0,
-                    'user_id': '$_id',
-                    'total': 1,
-                    'channels': 1,
-                }
-            },
-        ]
+                    )
+            result.append({'user_id': user_id, 'total': total, 'channels': channels})
+        return result
 
     async def aggregate_user_message_stats(self) -> list[dict[str, Any]]:
-        pipeline = self._build_user_message_stats_pipeline()
-        cursor = await self.collection.aggregate(pipeline, allowDiskUse=True)
-        return [doc async for doc in cursor]
+        return await self._aggregate_user_message_stats()
 
     async def aggregate_user_message_stats_for_users(
         self,
@@ -260,7 +323,4 @@ class MessagesRepository(BaseMongoRepository):
         normalized = self._normalize_user_ids(user_ids)
         if not normalized:
             return []
-        pipeline = self._build_user_message_stats_pipeline(normalized)
-
-        cursor = await self.collection.aggregate(pipeline, allowDiskUse=True)
-        return [doc async for doc in cursor]
+        return await self._aggregate_user_message_stats(normalized)
