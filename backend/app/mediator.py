@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import logging
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -21,6 +22,8 @@ from .exceptions import EmptyChannelIdentifierError
 from .exceptions import UserEntityTypeError
 from .storage import Storage
 from .telegram import Telegram
+
+logger = logging.getLogger(__name__)
 
 
 def async_cache(func):
@@ -168,6 +171,10 @@ class Mediator:
             try:
                 entity = await self.resolve_channel_entity(channel)
             except Exception:
+                logger.exception(
+                    'Failed to resolve channel entity for refresh (channel_id=%s)',
+                    channel_id,
+                )
                 continue
             try:
                 message_batch: list[dict[str, Any]] = []
@@ -185,6 +192,10 @@ class Mediator:
                         await flush_batch(channel_id, message_batch)
                 await flush_batch(channel_id, message_batch)
             except Exception:
+                logger.exception(
+                    'Failed to refresh messages for channel (channel_id=%s)',
+                    channel_id,
+                )
                 continue
         return {
             'total': messages_total,

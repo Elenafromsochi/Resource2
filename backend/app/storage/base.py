@@ -1,3 +1,4 @@
+import base64
 import json
 from datetime import date
 from datetime import datetime
@@ -12,13 +13,18 @@ from app.config import POSTGRES_URL
 
 
 def _json_default(value: object) -> str:
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        # Telethon payloads may contain binary fields (e.g. file references).
+        encoded = base64.b64encode(bytes(value)).decode('ascii')
+        return f'base64:{encoded}'
     if isinstance(value, datetime):
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
         return value.isoformat()
     if isinstance(value, date):
         return value.isoformat()
-    raise TypeError(f'Unsupported JSON value type: {type(value).__name__}')
+    # Keep message export resilient if unknown types appear in payload.
+    return str(value)
 
 
 def _json_encode(value: object) -> str:
