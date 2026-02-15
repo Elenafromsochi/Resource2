@@ -20,5 +20,6 @@ handler.setFormatter(ColoredFormatter(
 ))
 logging.basicConfig(level=logging.DEBUG, handlers=[handler])
 logging.getLogger('telethon').setLevel(logging.INFO)
+logging.getLogger('httpcore').setLevel(logging.INFO)
 
 uvicorn.run(app, host='0.0.0.0', port=8000)
