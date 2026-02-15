@@ -6,6 +6,8 @@ from app.schemas import ChannelCreate
 from app.schemas import ChannelDetailsResponse
 from app.schemas import ChannelListResponse
 from app.schemas import ChannelOut
+from app.schemas import AnalyzeRenderedMessagesRequest
+from app.schemas import AnalyzeRenderedMessagesResponse
 from app.schemas import RefreshMessagesRequest
 from app.schemas import RefreshMessagesResponse
 from app.schemas import RenderMessagesRequest
@@ -85,3 +87,17 @@ async def render_messages(payload: RenderMessagesRequest, request: Request):
         payload.date_to,
     )
     return {'channel_id': payload.channel_id, 'messages': messages}
+
+
+@router.post(
+    '/analyze-rendered-messages',
+    response_model=AnalyzeRenderedMessagesResponse,
+)
+async def analyze_rendered_messages(
+    payload: AnalyzeRenderedMessagesRequest,
+    request: Request,
+):
+    return await request.app.state.mediator.analyze_rendered_messages(
+        payload.prompt_id,
+        payload.messages,
+    )

@@ -67,7 +67,40 @@
             >
               Вывести сообщения
             </button>
+            <button
+              type="button"
+              :disabled="
+                cacheRefreshing ||
+                userListLoading ||
+                userStatsRefreshing ||
+                renderMessagesLoading ||
+                analyzeMessagesLoading ||
+                !canAnalyzeRenderedMessages
+              "
+              @click="analyzeRenderedMessages"
+            >
+              {{ analyzeMessagesLoading ? "Анализ..." : "Анализ через DeepSeek" }}
+            </button>
           </div>
+        </div>
+        <div class="analysis-prompt">
+          <label class="field-label" for="analysis-prompt-select">
+            Базовый промпт для анализа
+          </label>
+          <select
+            id="analysis-prompt-select"
+            v-model="selectedAnalysisPromptId"
+            :disabled="promptsLoading || analyzeMessagesLoading || prompts.length === 0"
+          >
+            <option :value="null" disabled>Выберите промпт</option>
+            <option
+              v-for="prompt in prompts"
+              :key="`analysis-prompt-${prompt.id}`"
+              :value="prompt.id"
+            >
+              {{ prompt.title }}
+            </option>
+          </select>
         </div>
         <div class="table-container analysis-table">
           <table class="compact-table">
@@ -173,6 +206,9 @@
         <div v-if="renderMessagesLoading" class="muted">
           Загрузка сообщений...
         </div>
+        <div v-if="analyzeMessagesLoading" class="muted">
+          Анализ сообщений через DeepSeek...
+        </div>
         <div v-if="renderMessagesResult" class="render-messages">
           <div class="render-messages-header">
             <h3>Сообщения</h3>
@@ -193,9 +229,32 @@
             <pre class="render-messages-content">{{ renderMessagesText }}</pre>
           </div>
         </div>
+        <div v-if="analyzeMessagesResult" class="render-messages analysis-result">
+          <div class="render-messages-header">
+            <h3>Результат анализа</h3>
+            <span class="render-messages-summary">
+              Промпт: {{ analyzeMessagesResult.prompt_title }}
+            </span>
+            <button
+              type="button"
+              class="cache-refresh-close"
+              aria-label="Скрыть результат анализа"
+              @click="dismissAnalyzeMessagesResult"
+            >
+              Скрыть
+            </button>
+          </div>
+          <div class="render-messages-body">
+            <pre class="render-messages-content">{{ analyzeMessagesResult.analysis }}</pre>
+          </div>
+        </div>
         <div v-if="renderMessagesError" class="analysis-errors">
           <h3>Ошибка вывода сообщений</h3>
           <div>{{ renderMessagesError }}</div>
+        </div>
+        <div v-if="analyzeMessagesError" class="analysis-errors">
+          <h3>Ошибка анализа сообщений</h3>
+          <div>{{ analyzeMessagesError }}</div>
         </div>
       </section>
 
@@ -694,6 +753,10 @@ const userStatsRefreshResult = ref(null);
 const renderMessagesLoading = ref(false);
 const renderMessagesResult = ref(null);
 const renderMessagesError = ref(null);
+const selectedAnalysisPromptId = ref(null);
+const analyzeMessagesLoading = ref(false);
+const analyzeMessagesResult = ref(null);
+const analyzeMessagesError = ref(null);
 
 const prompts = ref([]);
 const promptsLoading = ref(false);
@@ -805,6 +868,16 @@ const selectedChannelIdForMessages = computed(() => {
   return null;
 });
 const canRenderMessages = computed(() => selectedChannelIdForMessages.value !== null);
+const canAnalyzeRenderedMessages = computed(() => {
+  const selectedPromptId = Number(selectedAnalysisPromptId.value);
+  const messages = renderMessagesResult.value?.messages;
+  return (
+    Number.isInteger(selectedPromptId) &&
+    selectedPromptId > 0 &&
+    Array.isArray(messages) &&
+    messages.length > 0
+  );
+});
 const cacheRefreshChannels = computed(() => {
   const channels = cacheRefreshResult.value?.channels;
   if (!Array.isArray(channels)) {
@@ -1102,11 +1175,25 @@ const fetchChannelsForSelect = async () => {
   channelsForSelect.value = data;
 };
 
+const syncSelectedAnalysisPrompt = () => {
+  if (!Array.isArray(prompts.value) || prompts.value.length === 0) {
+    selectedAnalysisPromptId.value = null;
+    return;
+  }
+  const hasSelectedPrompt = prompts.value.some(
+    (prompt) => prompt.id === selectedAnalysisPromptId.value,
+  );
+  if (!hasSelectedPrompt) {
+    selectedAnalysisPromptId.value = prompts.value[0].id;
+  }
+};
+
 const fetchPrompts = async () => {
   promptsLoading.value = true;
   try {
     const { data } = await api.get("/prompts");
     prompts.value = Array.isArray(data) ? data : [];
+    syncSelectedAnalysisPrompt();
   } finally {
     promptsLoading.value = false;
   }
@@ -1216,11 +1303,15 @@ const renderMessages = async () => {
   if (!channelId) {
     renderMessagesError.value = "Выберите один канал для вывода сообщений.";
     renderMessagesResult.value = null;
+    analyzeMessagesResult.value = null;
+    analyzeMessagesError.value = null;
     return;
   }
   renderMessagesLoading.value = true;
   renderMessagesError.value = null;
   renderMessagesResult.value = null;
+  analyzeMessagesResult.value = null;
+  analyzeMessagesError.value = null;
   const dateFrom = getUtcStartDate(rangeEndDays.value).toISOString();
   const dateTo = getUtcEndDate(rangeStartDays.value).toISOString();
   const payload = { channel_id: channelId, date_from: dateFrom, date_to: dateTo };
@@ -1232,6 +1323,36 @@ const renderMessages = async () => {
     renderMessagesError.value = detail || error?.message || "Ошибка запроса.";
   } finally {
     renderMessagesLoading.value = false;
+  }
+};
+
+const analyzeRenderedMessages = async () => {
+  const promptId = Number(selectedAnalysisPromptId.value);
+  const messages = renderMessagesResult.value?.messages;
+  if (!Number.isInteger(promptId) || promptId <= 0) {
+    analyzeMessagesError.value = "Выберите базовый промпт для анализа.";
+    analyzeMessagesResult.value = null;
+    return;
+  }
+  if (!Array.isArray(messages) || messages.length === 0) {
+    analyzeMessagesError.value = "Сначала выведите сообщения для анализа.";
+    analyzeMessagesResult.value = null;
+    return;
+  }
+  analyzeMessagesLoading.value = true;
+  analyzeMessagesError.value = null;
+  analyzeMessagesResult.value = null;
+  try {
+    const { data } = await api.post("/channels/analyze-rendered-messages", {
+      prompt_id: promptId,
+      messages,
+    });
+    analyzeMessagesResult.value = data;
+  } catch (error) {
+    const detail = error?.response?.data?.detail;
+    analyzeMessagesError.value = detail || error?.message || "Ошибка запроса.";
+  } finally {
+    analyzeMessagesLoading.value = false;
   }
 };
 
@@ -1253,6 +1374,13 @@ const dismissCacheRefreshResult = () => {
 const dismissRenderMessages = () => {
   renderMessagesResult.value = null;
   renderMessagesError.value = null;
+  analyzeMessagesResult.value = null;
+  analyzeMessagesError.value = null;
+};
+
+const dismissAnalyzeMessagesResult = () => {
+  analyzeMessagesResult.value = null;
+  analyzeMessagesError.value = null;
 };
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -1433,6 +1561,21 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.analysis-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 420px;
+}
+
+.analysis-prompt select {
+  padding: 5px 8px;
+  border: 1px solid #cbd2d9;
+  border-radius: 4px;
+  font-size: 12px;
+  width: 100%;
 }
 
 .range-control {
