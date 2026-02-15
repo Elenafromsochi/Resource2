@@ -214,7 +214,7 @@
             <h3>Сообщения</h3>
             <span class="render-messages-summary">
               Канал: {{ formatSelectedChannelLabel(renderMessagesResult.channel_id) }},
-              сообщений: {{ renderMessagesResult.messages.length }},
+              сообщений: {{ renderedMessagesCount }},
               размер текста: {{ renderMessagesTextStats }}
             </span>
             <button
@@ -901,12 +901,26 @@ const cacheRefreshChannels = computed(() => {
       return a.channel_id - b.channel_id;
     });
 });
-const renderMessagesText = computed(() => {
+const renderMessageLines = computed(() => {
   const messages = renderMessagesResult.value?.messages;
   if (!Array.isArray(messages)) {
-    return "";
+    return [];
   }
-  return messages.join("\n");
+  return messages.map((message) => String(message ?? ""));
+});
+const renderedMessagesOnly = computed(() => {
+  const lines = renderMessageLines.value;
+  if (lines.length === 0) {
+    return [];
+  }
+  if (lines[0].startsWith("FORMAT:")) {
+    return lines.slice(1);
+  }
+  return lines;
+});
+const renderedMessagesCount = computed(() => renderedMessagesOnly.value.length);
+const renderMessagesText = computed(() => {
+  return renderMessageLines.value.join("\n");
 });
 const formatBytes = (bytes) => {
   if (!Number.isFinite(bytes) || bytes <= 0) {
@@ -921,7 +935,7 @@ const formatBytes = (bytes) => {
   return `${(bytes / (1024 * 1024)).toFixed(2)} МБ`;
 };
 const renderMessagesTextStats = computed(() => {
-  const text = renderMessagesText.value;
+  const text = renderedMessagesOnly.value.join("\n");
   const bytes = new TextEncoder().encode(text).length;
   return `${text.length} симв. (${formatBytes(bytes)})`;
 });
