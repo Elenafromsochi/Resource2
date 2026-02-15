@@ -483,9 +483,7 @@ class Mediator:
         return (timestamp, message_id)
 
     @staticmethod
-    def _format_user_tag(user_id: int, usernames: dict[int, str]) -> str | None:
-        if user_id is None:
-            return None
+    def _format_user_tag(user_id: int, usernames: dict[int, str]) -> str:
         username = usernames.get(user_id)
         if username:
             normalized_username = str(username).strip().lstrip('@')
