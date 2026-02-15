@@ -274,7 +274,13 @@ class Mediator:
             line = self._format_message_line(message, usernames)
             if line:
                 rendered.append(line)
-        return rendered
+        if not rendered:
+            return []
+        format_hint = (
+            'FORMAT: time, message_id, username|user_id, '
+            '[-> reply_message_id], [->> user_id|channel_id-message_id]: text'
+        )
+        return [format_hint, *rendered]
 
     async def analyze_rendered_messages(
         self,
@@ -357,7 +363,6 @@ class Mediator:
             user_id = self._get_message_user_id(message)
             if user_id is not None:
                 user_ids.add(user_id)
-            user_ids.update(self._get_forward_user_ids(message))
         return user_ids
 
     async def _get_usernames_by_ids(
@@ -423,32 +428,25 @@ class Mediator:
         if message_id is None:
             return None
         message_time = self._format_message_time(message.get('date'))
+        if not message_time:
+            message_time = '00:00:00'
         user_id = self._get_message_user_id(message)
         if user_id is None:
             user_id = 0
         user_tag = self._format_user_tag(user_id, usernames)
-        parts = []
-        if message_time:
-            parts.append(message_time)
-        parts.append(f'm{message_id}')
-        if user_tag:
-            parts.append(user_tag)
-        reply_id = self._get_reply_message_id(message)
-        if reply_id is not None:
-            parts.append(f'-> m{reply_id}')
-        forward_tag = self._format_forward_tag(message, usernames)
-        if forward_tag:
-            parts.append(forward_tag)
-        if self._message_has_media(message):
-            parts.append('[media]')
-        if self._message_has_poll(message):
-            parts.append('[pool]')
         text = self._normalize_message_text(
             message.get('message') or message.get('text')
         )
-        if text:
-            parts.append(text)
-        return ' '.join(parts).strip()
+        if not text:
+            return None
+        parts = [message_time, str(message_id), user_tag]
+        reply_id = self._get_reply_message_id(message)
+        if reply_id is not None:
+            parts.append(f'-> {reply_id}')
+        forward_reference = self._format_forward_reference(message)
+        if forward_reference:
+            parts.append(f'->> {forward_reference}')
+        return f"{', '.join(parts)}: {text}"
 
     @staticmethod
     def _format_message_time(value: Any) -> str | None:
@@ -490,8 +488,8 @@ class Mediator:
             return None
         username = usernames.get(user_id)
         if username:
-            return f'@{username}'
-        return f'u{user_id}'
+            return username
+        return str(user_id)
 
     @staticmethod
     def _safe_int(value: Any) -> int | None:
@@ -570,84 +568,38 @@ class Mediator:
             reply_id = reply_to.get('reply_to_message_id')
         return self._safe_int(reply_id)
 
-    def _format_forward_tag(
-        self,
-        message: dict[str, Any],
-        usernames: dict[int, str],
-    ) -> str | None:
+    def _format_forward_reference(self, message: dict[str, Any]) -> str | None:
         fwd = message.get('fwd_from')
         if not isinstance(fwd, dict):
             return None
-        parts: list[str] = []
-
-        def add_part(value: str | None) -> None:
-            if not value:
-                return
-            if value in parts:
-                return
-            parts.append(value)
-
+        source_id = None
+        source_message_id = None
         from_id = fwd.get('from_id')
         if isinstance(from_id, dict):
-            user_id = self._safe_int(from_id.get('user_id'))
-            if user_id is not None:
-                add_part(self._format_user_tag(user_id, usernames))
-            channel_id = self._safe_int(from_id.get('channel_id'))
-            if channel_id is not None:
-                channel_post = self._safe_int(fwd.get('channel_post'))
-                if channel_post is not None:
-                    add_part(f'ch{channel_id} m{channel_post}')
-                else:
-                    add_part(f'ch{channel_id}')
-        user_id = self._safe_int(fwd.get('user_id'))
-        if user_id is not None:
-            add_part(self._format_user_tag(user_id, usernames))
-        channel_id = self._safe_int(fwd.get('channel_id'))
-        if channel_id is not None:
-            channel_post = self._safe_int(fwd.get('channel_post'))
-            if channel_post is not None:
-                add_part(f'ch{channel_id} m{channel_post}')
-            else:
-                add_part(f'ch{channel_id}')
-        if not parts:
+            source_id = self._safe_int(from_id.get('user_id'))
+            if source_id is None:
+                source_id = self._safe_int(from_id.get('channel_id'))
+            if source_id is None:
+                source_id = self._safe_int(from_id.get('chat_id'))
+        if source_id is None:
+            source_id = self._safe_int(fwd.get('user_id'))
+        if source_id is None:
+            source_id = self._safe_int(fwd.get('channel_id'))
+        if source_id is None:
+            source_id = self._safe_int(fwd.get('chat_id'))
+        saved_from_peer = fwd.get('saved_from_peer')
+        if source_id is None and isinstance(saved_from_peer, dict):
+            source_id = self._safe_int(saved_from_peer.get('user_id'))
+            if source_id is None:
+                source_id = self._safe_int(saved_from_peer.get('channel_id'))
+            if source_id is None:
+                source_id = self._safe_int(saved_from_peer.get('chat_id'))
+        source_message_id = self._safe_int(fwd.get('channel_post'))
+        if source_message_id is None:
+            source_message_id = self._safe_int(fwd.get('saved_from_msg_id'))
+        if source_id is None or source_message_id is None:
             return None
-        return f"forwarded from {' | '.join(parts)}"
-
-    def _get_forward_user_ids(self, message: dict[str, Any]) -> set[int]:
-        fwd = message.get('fwd_from')
-        if not isinstance(fwd, dict):
-            return set()
-        user_ids: set[int] = set()
-        from_id = fwd.get('from_id')
-        if isinstance(from_id, dict):
-            user_id = self._safe_int(from_id.get('user_id'))
-            if user_id is not None:
-                user_ids.add(user_id)
-        user_id = self._safe_int(fwd.get('user_id'))
-        if user_id is not None:
-            user_ids.add(user_id)
-        return user_ids
-
-    @staticmethod
-    def _message_has_media(message: dict[str, Any]) -> bool:
-        media = message.get('media')
-        if not media:
-            return False
-        if isinstance(media, dict) and media.get('_') == 'MessageMediaEmpty':
-            return False
-        return True
-
-    @staticmethod
-    def _message_has_poll(message: dict[str, Any]) -> bool:
-        if message.get('poll'):
-            return True
-        media = message.get('media')
-        if isinstance(media, dict):
-            if media.get('_') == 'MessageMediaPoll':
-                return True
-            if media.get('poll') is not None:
-                return True
-        return False
+        return f'{source_id}-{source_message_id}'
 
     async def refresh_user_profiles(
         self,
