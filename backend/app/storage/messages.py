@@ -39,7 +39,7 @@ class MessagesRepository(BaseRepository):
             return []
         rows = await self.pool.fetch(
             """
-            SELECT channel_id, message_id, detail
+            SELECT channel_id, message_id, detail, date
             FROM messages
             WHERE channel_id = $1
               AND date BETWEEN $2 AND $3
@@ -64,7 +64,7 @@ class MessagesRepository(BaseRepository):
             return []
         rows = await self.pool.fetch(
             """
-            SELECT channel_id, message_id, detail
+            SELECT channel_id, message_id, detail, date
             FROM messages
             WHERE channel_id = $1
               AND message_id = ANY($2::BIGINT[])
@@ -95,6 +95,8 @@ class MessagesRepository(BaseRepository):
             detail = dict(row['detail'])
             if detail.get('id') is None:
                 detail['id'] = row['message_id']
+            if row['date'] is not None:
+                detail['date'] = row['date']
             items.append(detail)
         return items
 
