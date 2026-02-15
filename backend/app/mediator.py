@@ -277,8 +277,8 @@ class Mediator:
         if not rendered:
             return []
         format_hint = (
-            'FORMAT: time, message_id, username|user_id, '
-            '[-> reply_message_id], [->> user_id|channel_id-message_id]: text'
+            'FORMAT: time message_id username|user_id '
+            '[-> reply_message_id] [->> user_id|channel_id-message_id]: text'
         )
         return [format_hint, *rendered]
 
@@ -446,7 +446,7 @@ class Mediator:
         forward_reference = self._format_forward_reference(message)
         if forward_reference:
             parts.append(f'->> {forward_reference}')
-        return f"{', '.join(parts)}: {text}"
+        return f"{' '.join(parts)}: {text}"
 
     @staticmethod
     def _format_message_time(value: Any) -> str | None:
