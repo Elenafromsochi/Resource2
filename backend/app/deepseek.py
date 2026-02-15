@@ -45,14 +45,7 @@ class DeepSeek:
             model=DEEPSEEK_MODEL,
             messages=[
                 {'role': 'system', 'content': base_prompt.strip()},
-                {
-                    'role': 'user',
-                    'content': (
-                        'Проанализируй сообщения ниже, используя системный промпт '
-                        'как базовые инструкции.\n\n'
-                        f'{rendered_messages}'
-                    ),
-                },
+                {'role': 'user', 'content': rendered_messages},
             ],
             stream=False,
         )
