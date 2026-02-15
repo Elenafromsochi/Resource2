@@ -434,9 +434,9 @@ class Mediator:
         if user_id is None:
             user_id = 0
         user_tag = self._format_user_tag(user_id, usernames)
-        text = self._normalize_message_text(
-            message.get('message') or message.get('text')
-        )
+        text = self._normalize_message_text(message.get('message'))
+        if not text:
+            text = self._normalize_message_text(message.get('text'))
         if not text:
             return None
         parts = [message_time, str(message_id), user_tag]
@@ -502,9 +502,9 @@ class Mediator:
 
     @staticmethod
     def _normalize_message_text(value: Any) -> str:
-        if value is None:
+        if not isinstance(value, str):
             return ''
-        text = str(value)
+        text = value
         text = ' '.join(text.splitlines())
         return text.strip()
 
