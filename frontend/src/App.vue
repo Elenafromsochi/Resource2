@@ -214,7 +214,8 @@
             <h3>Сообщения</h3>
             <span class="render-messages-summary">
               Канал: {{ formatSelectedChannelLabel(renderMessagesResult.channel_id) }},
-              сообщений: {{ renderMessagesResult.messages.length }}
+              сообщений: {{ renderMessagesResult.messages.length }},
+              размер текста: {{ renderMessagesTextStats }}
             </span>
             <button
               type="button"
@@ -906,6 +907,23 @@ const renderMessagesText = computed(() => {
     return "";
   }
   return messages.join("\n");
+});
+const formatBytes = (bytes) => {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 Б";
+  }
+  if (bytes < 1024) {
+    return `${bytes} Б`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} КБ`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(2)} МБ`;
+};
+const renderMessagesTextStats = computed(() => {
+  const text = renderMessagesText.value;
+  const bytes = new TextEncoder().encode(text).length;
+  return `${text.length} симв. (${formatBytes(bytes)})`;
 });
 
 const isEditingPrompt = computed(() => editingPromptId.value !== null);
