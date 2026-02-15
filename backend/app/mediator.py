@@ -277,7 +277,7 @@ class Mediator:
         if not rendered:
             return []
         format_hint = (
-            'FORMAT: time message_id username|user_id '
+            'FORMAT: time message_id user_id [@username] '
             '[-> reply_message_id] [->> user_id|channel_id-message_id]: text'
         )
         return [format_hint, *rendered]
@@ -488,7 +488,9 @@ class Mediator:
             return None
         username = usernames.get(user_id)
         if username:
-            return username
+            normalized_username = str(username).strip().lstrip('@')
+            if normalized_username:
+                return f'{user_id} @{normalized_username}'
         return str(user_id)
 
     @staticmethod
