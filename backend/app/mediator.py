@@ -278,7 +278,7 @@ class Mediator:
             return []
         format_hint = (
             'FORMAT: time message_id user_id [@username] '
-            '[-> reply_message_id] [->> user_id|channel_id-message_id]: text'
+            '[-> reply_message_id] [->> source_id|source_id-message_id|source_name]: text'
         )
         return [format_hint, *rendered]
 
@@ -336,23 +336,123 @@ class Mediator:
                 continue
             message_by_id[message_id] = message
             ordered.append(message)
-        missing_reply_ids: set[int] = set()
+        pending_reply_ids: set[int] = set()
         for message in ordered:
             reply_id = self._get_reply_message_id(message)
             if reply_id is not None and reply_id not in message_by_id:
-                missing_reply_ids.add(reply_id)
-        if missing_reply_ids:
+                pending_reply_ids.add(reply_id)
+        while pending_reply_ids:
+            loaded_reply_ids: set[int] = set()
             reply_messages = await self.storage.messages.list_by_channel_and_ids(
                 channel_id,
-                list(missing_reply_ids),
+                list(pending_reply_ids),
             )
             for reply_message in reply_messages:
                 reply_id = self._safe_int(reply_message.get('id'))
-                if reply_id is None or reply_id in message_by_id:
+                if reply_id is None:
+                    continue
+                loaded_reply_ids.add(reply_id)
+                if reply_id in message_by_id:
                     continue
                 message_by_id[reply_id] = reply_message
                 ordered.append(reply_message)
+
+            missing_in_storage = pending_reply_ids - loaded_reply_ids
+            if missing_in_storage:
+                fetched_reply_messages = await self._fetch_channel_messages_by_ids(
+                    channel_id,
+                    missing_in_storage,
+                )
+                if fetched_reply_messages:
+                    try:
+                        await self.storage.messages.upsert_many(
+                            channel_id,
+                            fetched_reply_messages,
+                        )
+                    except Exception:
+                        logger.exception(
+                            'Failed to cache fetched reply messages (channel_id=%s)',
+                            channel_id,
+                        )
+                for reply_message in fetched_reply_messages:
+                    reply_id = self._safe_int(reply_message.get('id'))
+                    if reply_id is None:
+                        continue
+                    loaded_reply_ids.add(reply_id)
+                    if reply_id in message_by_id:
+                        continue
+                    message_by_id[reply_id] = reply_message
+                    ordered.append(reply_message)
+
+            next_pending_reply_ids: set[int] = set()
+            for loaded_reply_id in loaded_reply_ids:
+                reply_message = message_by_id.get(loaded_reply_id)
+                if not isinstance(reply_message, dict):
+                    continue
+                nested_reply_id = self._get_reply_message_id(reply_message)
+                if nested_reply_id is None or nested_reply_id in message_by_id:
+                    continue
+                next_pending_reply_ids.add(nested_reply_id)
+            if not next_pending_reply_ids:
+                break
+            pending_reply_ids = next_pending_reply_ids
         return sorted(ordered, key=self._message_sort_key)
+
+    async def _fetch_channel_messages_by_ids(
+        self,
+        channel_id: int,
+        message_ids: set[int],
+    ) -> list[dict[str, Any]]:
+        if not message_ids:
+            return []
+        try:
+            entity = await self.get_channel_entity(channel_id)
+        except Exception:
+            logger.exception(
+                'Failed to resolve channel for missing replies (channel_id=%s)',
+                channel_id,
+            )
+            return []
+        try:
+            fetched_messages = await self.telegram.client.get_messages(
+                entity,
+                ids=sorted(message_ids),
+            )
+        except Exception:
+            logger.exception(
+                'Failed to fetch missing replies from Telegram '
+                '(channel_id=%s, message_ids=%s)',
+                channel_id,
+                sorted(message_ids),
+            )
+            return []
+        if fetched_messages is None:
+            return []
+        if not isinstance(fetched_messages, list):
+            fetched_messages = [fetched_messages]
+        normalized: list[dict[str, Any]] = []
+        for fetched_message in fetched_messages:
+            if fetched_message is None:
+                continue
+            raw_message = fetched_message.to_dict()
+            if not raw_message:
+                continue
+            message = self._sanitize_message_payload(raw_message)
+            if not isinstance(message, dict):
+                continue
+            message_id = self._safe_int(message.get('id'))
+            if message_id is None:
+                message_id = self._safe_int(getattr(fetched_message, 'id', None))
+            if message_id is None:
+                continue
+            message['id'] = message_id
+            message_date = getattr(fetched_message, 'date', None)
+            if isinstance(message_date, datetime):
+                message['date'] = message_date
+            elif message.get('date') is None:
+                continue
+            normalized.append(message)
+        return normalized
 
     def _collect_message_user_ids(
         self,
@@ -566,6 +666,8 @@ class Mediator:
         reply_id = reply_to.get('reply_to_msg_id')
         if reply_id is None:
             reply_id = reply_to.get('reply_to_message_id')
+        if reply_id is None:
+            reply_id = reply_to.get('reply_to_top_id')
         return self._safe_int(reply_id)
 
     def _format_forward_reference(self, message: dict[str, Any]) -> str | None:
@@ -597,9 +699,14 @@ class Mediator:
         source_message_id = self._safe_int(fwd.get('channel_post'))
         if source_message_id is None:
             source_message_id = self._safe_int(fwd.get('saved_from_msg_id'))
-        if source_id is None or source_message_id is None:
-            return None
-        return f'{source_id}-{source_message_id}'
+        if source_id is not None and source_message_id is not None:
+            return f'{source_id}-{source_message_id}'
+        if source_id is not None:
+            return str(source_id)
+        source_name = self._normalize_message_text(fwd.get('from_name'))
+        if source_name:
+            return source_name
+        return 'forwarded'
 
     async def refresh_user_profiles(
         self,
