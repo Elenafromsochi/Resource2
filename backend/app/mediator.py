@@ -15,10 +15,12 @@ from telethon.tl.types import Chat
 from telethon.tl.types import User
 
 from .deepseek import DeepSeek
+from .exceptions import AppException
 from .exceptions import ChannelEntityTypeError
 from .exceptions import ChannelHasNoUsernameError
 from .exceptions import ChannelNotFoundError
 from .exceptions import EmptyChannelIdentifierError
+from .exceptions import PromptNotFoundError
 from .exceptions import UserEntityTypeError
 from .storage import Storage
 from .telegram import Telegram
@@ -273,6 +275,43 @@ class Mediator:
             if line:
                 rendered.append(line)
         return rendered
+
+    async def analyze_rendered_messages(
+        self,
+        prompt_id: int,
+        messages: list[str],
+    ) -> dict[str, Any]:
+        prompt = await self.storage.prompts.get(prompt_id)
+        if not prompt:
+            raise PromptNotFoundError()
+        prompt_text = str(prompt.get('text') or '').strip()
+        if not prompt_text:
+            raise AppException('Prompt text is empty')
+        normalized_messages = [
+            str(message).strip()
+            for message in (messages or [])
+            if message is not None and str(message).strip()
+        ]
+        if not normalized_messages:
+            raise AppException('No rendered messages to analyze')
+        try:
+            analysis = await self.deepseek.analyze_messages(
+                prompt_text,
+                normalized_messages,
+            )
+        except Exception:
+            logger.exception(
+                'Failed to analyze rendered messages (prompt_id=%s)',
+                prompt_id,
+            )
+            raise AppException('DeepSeek analysis request failed')
+        if not analysis:
+            raise AppException('DeepSeek returned an empty analysis')
+        return {
+            'prompt_id': prompt_id,
+            'prompt_title': str(prompt.get('title') or prompt_id),
+            'analysis': analysis,
+        }
 
     async def _extend_messages_with_missing_replies(
         self,

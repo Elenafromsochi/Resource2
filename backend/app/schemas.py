@@ -64,6 +64,17 @@ class RenderMessagesResponse(BaseModel):
     messages: list[str] = Field(default_factory=list)
 
 
+class AnalyzeRenderedMessagesRequest(BaseModel):
+    prompt_id: int
+    messages: list[str] = Field(default_factory=list)
+
+
+class AnalyzeRenderedMessagesResponse(BaseModel):
+    prompt_id: int
+    prompt_title: str
+    analysis: str
+
+
 class RefreshUserStatsResponse(BaseModel):
     users_updated: int
     channels_with_messages: int
