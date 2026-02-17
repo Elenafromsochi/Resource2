@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     last_name TEXT,
     bio TEXT,
     photo TEXT,
+    conclusion JSONB,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -63,6 +64,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_channel_id ON messages (channel_id);
 CREATE INDEX IF NOT EXISTS idx_messages_channel_date ON messages (channel_id, date);
 
 ALTER TABLE users DROP COLUMN IF EXISTS messages_count;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS conclusion JSONB;
 DROP INDEX IF EXISTS idx_users_activity;
 DROP TABLE IF EXISTS channel_users;
 DROP TABLE IF EXISTS migrations;
