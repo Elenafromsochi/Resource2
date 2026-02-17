@@ -326,7 +326,7 @@ class Mediator:
         if not conclusions:
             raise AppException(
                 'DeepSeek returned invalid analysis format. '
-                'Expected JSON objects with id, needs, offers.'
+                'Expected a JSON list of objects with id.'
             )
         try:
             await self.storage.users.upsert_conclusions(conclusions)
@@ -336,52 +336,41 @@ class Mediator:
 
     def _extract_user_conclusions(self, analysis: str) -> list[dict[str, Any]]:
         payload = self._parse_json_payload(analysis)
-        entries = self._normalize_conclusion_entries(payload)
+        entries = self._extract_dict_list(payload)
         if not entries:
             return []
-        normalized_by_id: dict[int, dict[str, list[str]]] = {}
+        normalized_by_id: dict[int, dict[str, Any]] = {}
         for entry in entries:
             user_id = self._safe_int(entry.get('id'))
             if user_id is None:
                 continue
+            # id is used only for row mapping and is excluded from stored JSON.
             normalized_by_id[user_id] = {
-                # id is used only for row mapping and is excluded from stored JSON.
-                'needs': self._normalize_string_list(entry.get('needs')),
-                'offers': self._normalize_string_list(entry.get('offers')),
+                key: value
+                for key, value in entry.items()
+                if key != 'id'
             }
         return [
             {'id': user_id, 'conclusion': conclusion}
             for user_id, conclusion in normalized_by_id.items()
         ]
 
-    def _normalize_conclusion_entries(self, payload: Any) -> list[dict[str, Any]]:
+    def _extract_dict_list(self, payload: Any) -> list[dict[str, Any]]:
         if isinstance(payload, list):
-            return [item for item in payload if isinstance(item, dict)]
-        if isinstance(payload, dict):
-            if 'id' in payload:
-                return [payload]
-            for key in ('items', 'users', 'results', 'data'):
-                nested = payload.get(key)
-                if isinstance(nested, list):
-                    return [item for item in nested if isinstance(item, dict)]
-        return []
-
-    @staticmethod
-    def _normalize_string_list(value: Any) -> list[str]:
-        if value is None:
+            list_items = [item for item in payload if isinstance(item, dict)]
+            if list_items:
+                return list_items
+            for item in payload:
+                nested_items = self._extract_dict_list(item)
+                if nested_items:
+                    return nested_items
             return []
-        if isinstance(value, list):
-            items = [
-                str(item).strip()
-                for item in value
-                if item is not None and str(item).strip()
-            ]
-            return items
-        if isinstance(value, str):
-            normalized = value.strip()
-            return [normalized] if normalized else []
-        normalized = str(value).strip()
-        return [normalized] if normalized else []
+        if isinstance(payload, dict):
+            for value in payload.values():
+                nested_items = self._extract_dict_list(value)
+                if nested_items:
+                    return nested_items
+        return []
 
     def _parse_json_payload(self, value: str) -> Any:
         if not isinstance(value, str):
