@@ -81,6 +81,20 @@
             >
               {{ analyzeMessagesLoading ? "Анализ..." : "Анализ через DeepSeek" }}
             </button>
+            <button
+              type="button"
+              :disabled="
+                cacheRefreshing ||
+                userListLoading ||
+                userStatsRefreshing ||
+                renderMessagesLoading ||
+                analyzeMessagesLoading ||
+                !canAnalyzeSelectedChannels
+              "
+              @click="analyzeSelectedChannelsMessages"
+            >
+              {{ analyzeMessagesLoading ? "Анализ..." : "Анализ выбранных каналов" }}
+            </button>
           </div>
         </div>
         <div class="analysis-prompt">
@@ -879,6 +893,15 @@ const canAnalyzeRenderedMessages = computed(() => {
     messages.length > 0
   );
 });
+const canAnalyzeSelectedChannels = computed(() => {
+  const selectedPromptId = Number(selectedAnalysisPromptId.value);
+  return (
+    Number.isInteger(selectedPromptId) &&
+    selectedPromptId > 0 &&
+    Array.isArray(selectedChannelIds.value) &&
+    selectedChannelIds.value.length > 0
+  );
+});
 const cacheRefreshChannels = computed(() => {
   const channels = cacheRefreshResult.value?.channels;
   if (!Array.isArray(channels)) {
@@ -1378,6 +1401,39 @@ const analyzeRenderedMessages = async () => {
     const { data } = await api.post("/channels/analyze-rendered-messages", {
       prompt_id: promptId,
       messages,
+    });
+    analyzeMessagesResult.value = data;
+  } catch (error) {
+    const detail = error?.response?.data?.detail;
+    analyzeMessagesError.value = detail || error?.message || "Ошибка запроса.";
+  } finally {
+    analyzeMessagesLoading.value = false;
+  }
+};
+
+const analyzeSelectedChannelsMessages = async () => {
+  const promptId = Number(selectedAnalysisPromptId.value);
+  if (!Number.isInteger(promptId) || promptId <= 0) {
+    analyzeMessagesError.value = "Выберите базовый промпт для анализа.";
+    analyzeMessagesResult.value = null;
+    return;
+  }
+  if (!Array.isArray(selectedChannelIds.value) || selectedChannelIds.value.length === 0) {
+    analyzeMessagesError.value = "Выберите хотя бы один канал для анализа.";
+    analyzeMessagesResult.value = null;
+    return;
+  }
+  analyzeMessagesLoading.value = true;
+  analyzeMessagesError.value = null;
+  analyzeMessagesResult.value = null;
+  const dateFrom = getUtcStartDate(rangeEndDays.value).toISOString();
+  const dateTo = getUtcEndDate(rangeStartDays.value).toISOString();
+  try {
+    const { data } = await api.post("/channels/analyze-selected-channels", {
+      prompt_id: promptId,
+      channel_ids: selectedChannelIds.value,
+      date_from: dateFrom,
+      date_to: dateTo,
     });
     analyzeMessagesResult.value = data;
   } catch (error) {
