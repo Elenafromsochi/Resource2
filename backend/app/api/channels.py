@@ -8,6 +8,7 @@ from app.schemas import ChannelListResponse
 from app.schemas import ChannelOut
 from app.schemas import AnalyzeRenderedMessagesRequest
 from app.schemas import AnalyzeRenderedMessagesResponse
+from app.schemas import AnalyzeSelectedChannelsRequest
 from app.schemas import RefreshMessagesRequest
 from app.schemas import RefreshMessagesResponse
 from app.schemas import RenderMessagesRequest
@@ -100,4 +101,20 @@ async def analyze_rendered_messages(
     return await request.app.state.mediator.analyze_rendered_messages(
         payload.prompt_id,
         payload.messages,
+    )
+
+
+@router.post(
+    '/analyze-selected-channels',
+    response_model=AnalyzeRenderedMessagesResponse,
+)
+async def analyze_selected_channels(
+    payload: AnalyzeSelectedChannelsRequest,
+    request: Request,
+):
+    return await request.app.state.mediator.analyze_selected_channels(
+        payload.prompt_id,
+        payload.channel_ids,
+        payload.date_from,
+        payload.date_to,
     )

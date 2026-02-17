@@ -59,6 +59,7 @@ def async_cache(func):
 
 class Mediator:
     _DROP_PAYLOAD_VALUE = object()
+    _MAX_ANALYSIS_CHUNK_SIZE = 30_000
 
     def __init__(self, telegram: Telegram, deepseek: DeepSeek, storage: Storage) -> None:
         self.telegram = telegram
@@ -288,38 +289,180 @@ class Mediator:
         prompt_id: int,
         messages: list[str],
     ) -> dict[str, Any]:
+        prompt, prompt_text = await self._get_analysis_prompt(prompt_id)
+        normalized_messages = self._normalize_message_lines(messages)
+        if not normalized_messages:
+            raise AppException('No rendered messages to analyze')
+        analysis = await self._analyze_messages_with_chunking(
+            prompt_id=prompt_id,
+            prompt_text=prompt_text,
+            messages=normalized_messages,
+            analysis_scope='rendered messages',
+        )
+        return {
+            'prompt_id': prompt_id,
+            'prompt_title': str(prompt.get('title') or prompt_id),
+            'analysis': analysis,
+        }
+
+    async def analyze_selected_channels(
+        self,
+        prompt_id: int,
+        channel_ids: list[int],
+        date_from: datetime,
+        date_to: datetime,
+    ) -> dict[str, Any]:
+        prompt, prompt_text = await self._get_analysis_prompt(prompt_id)
+        normalized_channel_ids: list[int] = []
+        seen_channel_ids: set[int] = set()
+        for channel_id in channel_ids or []:
+            normalized_channel_id = self._safe_int(channel_id)
+            if normalized_channel_id is None:
+                continue
+            if normalized_channel_id in seen_channel_ids:
+                continue
+            seen_channel_ids.add(normalized_channel_id)
+            normalized_channel_ids.append(normalized_channel_id)
+        if not normalized_channel_ids:
+            raise AppException('No channels selected for analysis')
+        channel_reports: list[tuple[int, str]] = []
+        for channel_id in normalized_channel_ids:
+            rendered_messages = await self.render_messages(
+                channel_id,
+                date_from,
+                date_to,
+            )
+            normalized_messages = self._normalize_message_lines(rendered_messages)
+            if not normalized_messages:
+                continue
+            analysis = await self._analyze_messages_with_chunking(
+                prompt_id=prompt_id,
+                prompt_text=prompt_text,
+                messages=normalized_messages,
+                analysis_scope=f'channel {channel_id}',
+            )
+            if analysis:
+                channel_reports.append((channel_id, analysis))
+        if not channel_reports:
+            raise AppException('No rendered messages to analyze for selected channels')
+        if len(channel_reports) == 1:
+            analysis_text = channel_reports[0][1]
+        else:
+            analysis_text = '\n\n'.join(
+                f'### Channel {channel_id}\n{analysis}'
+                for channel_id, analysis in channel_reports
+            )
+        return {
+            'prompt_id': prompt_id,
+            'prompt_title': str(prompt.get('title') or prompt_id),
+            'analysis': analysis_text,
+        }
+
+    async def _get_analysis_prompt(
+        self,
+        prompt_id: int,
+    ) -> tuple[dict[str, Any], str]:
         prompt = await self.storage.prompts.get(prompt_id)
         if not prompt:
             raise PromptNotFoundError()
         prompt_text = str(prompt.get('text') or '').strip()
         if not prompt_text:
             raise AppException('Prompt text is empty')
-        normalized_messages = [
+        return prompt, prompt_text
+
+    async def _analyze_messages_with_chunking(
+        self,
+        prompt_id: int,
+        prompt_text: str,
+        messages: list[str],
+        analysis_scope: str,
+    ) -> str:
+        chunks = self._split_analysis_message_chunks(
+            messages,
+            self._MAX_ANALYSIS_CHUNK_SIZE,
+        )
+        if not chunks:
+            raise AppException('No rendered messages to analyze')
+        total_chunks = len(chunks)
+        analyses: list[str] = []
+        for index, chunk in enumerate(chunks, start=1):
+            try:
+                analysis = await self.deepseek.analyze_messages(
+                    prompt_text,
+                    chunk,
+                )
+            except Exception:
+                logger.exception(
+                    'Failed to analyze %s (prompt_id=%s, chunk=%s/%s)',
+                    analysis_scope,
+                    prompt_id,
+                    index,
+                    total_chunks,
+                )
+                raise AppException('DeepSeek analysis request failed')
+            if not analysis:
+                raise AppException('DeepSeek returned an empty analysis')
+            await self._save_user_conclusions_from_analysis(analysis)
+            analyses.append(analysis)
+        if len(analyses) == 1:
+            return analyses[0]
+        return '\n\n'.join(
+            f'--- CHUNK {index}/{total_chunks} ---\n{analysis}'
+            for index, analysis in enumerate(analyses, start=1)
+        )
+
+    def _split_analysis_message_chunks(
+        self,
+        messages: list[str],
+        max_chunk_size: int,
+    ) -> list[list[str]]:
+        normalized_messages = self._normalize_message_lines(messages)
+        if not normalized_messages:
+            return []
+        format_hint = None
+        message_lines = normalized_messages
+        if message_lines[0].startswith('FORMAT:'):
+            format_hint = message_lines[0]
+            message_lines = message_lines[1:]
+        if not message_lines:
+            return [normalized_messages]
+        return self._split_analysis_message_chunks_recursive(
+            message_lines,
+            format_hint,
+            max_chunk_size,
+        )
+
+    def _split_analysis_message_chunks_recursive(
+        self,
+        message_lines: list[str],
+        format_hint: str | None,
+        max_chunk_size: int,
+    ) -> list[list[str]]:
+        chunk = [*([format_hint] if format_hint else []), *message_lines]
+        if len('\n'.join(chunk)) <= max_chunk_size or len(message_lines) <= 1:
+            return [chunk]
+        midpoint = len(message_lines) // 2
+        if midpoint <= 0 or midpoint >= len(message_lines):
+            return [chunk]
+        left_chunks = self._split_analysis_message_chunks_recursive(
+            message_lines[:midpoint],
+            format_hint,
+            max_chunk_size,
+        )
+        right_chunks = self._split_analysis_message_chunks_recursive(
+            message_lines[midpoint:],
+            format_hint,
+            max_chunk_size,
+        )
+        return [*left_chunks, *right_chunks]
+
+    @staticmethod
+    def _normalize_message_lines(messages: list[str] | None) -> list[str]:
+        return [
             str(message).strip()
             for message in (messages or [])
             if message is not None and str(message).strip()
         ]
-        if not normalized_messages:
-            raise AppException('No rendered messages to analyze')
-        try:
-            analysis = await self.deepseek.analyze_messages(
-                prompt_text,
-                normalized_messages,
-            )
-        except Exception:
-            logger.exception(
-                'Failed to analyze rendered messages (prompt_id=%s)',
-                prompt_id,
-            )
-            raise AppException('DeepSeek analysis request failed')
-        if not analysis:
-            raise AppException('DeepSeek returned an empty analysis')
-        await self._save_user_conclusions_from_analysis(analysis)
-        return {
-            'prompt_id': prompt_id,
-            'prompt_title': str(prompt.get('title') or prompt_id),
-            'analysis': analysis,
-        }
 
     async def _save_user_conclusions_from_analysis(self, analysis: str) -> None:
         conclusions = self._extract_user_conclusions(analysis)
