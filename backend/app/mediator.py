@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import json
 import logging
 import re
 from datetime import datetime, timezone
@@ -313,11 +314,109 @@ class Mediator:
             raise AppException('DeepSeek analysis request failed')
         if not analysis:
             raise AppException('DeepSeek returned an empty analysis')
+        await self._save_user_conclusions_from_analysis(analysis)
         return {
             'prompt_id': prompt_id,
             'prompt_title': str(prompt.get('title') or prompt_id),
             'analysis': analysis,
         }
+
+    async def _save_user_conclusions_from_analysis(self, analysis: str) -> None:
+        conclusions = self._extract_user_conclusions(analysis)
+        if not conclusions:
+            raise AppException(
+                'DeepSeek returned invalid analysis format. '
+                'Expected JSON objects with id, needs, offers.'
+            )
+        try:
+            await self.storage.users.upsert_conclusions(conclusions)
+        except Exception:
+            logger.exception('Failed to persist DeepSeek conclusions')
+            raise AppException('Failed to save DeepSeek analysis results')
+
+    def _extract_user_conclusions(self, analysis: str) -> list[dict[str, Any]]:
+        payload = self._parse_json_payload(analysis)
+        entries = self._normalize_conclusion_entries(payload)
+        if not entries:
+            return []
+        normalized_by_id: dict[int, dict[str, list[str]]] = {}
+        for entry in entries:
+            user_id = self._safe_int(entry.get('id'))
+            if user_id is None:
+                continue
+            normalized_by_id[user_id] = {
+                # id is used only for row mapping and is excluded from stored JSON.
+                'needs': self._normalize_string_list(entry.get('needs')),
+                'offers': self._normalize_string_list(entry.get('offers')),
+            }
+        return [
+            {'id': user_id, 'conclusion': conclusion}
+            for user_id, conclusion in normalized_by_id.items()
+        ]
+
+    def _normalize_conclusion_entries(self, payload: Any) -> list[dict[str, Any]]:
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, dict)]
+        if isinstance(payload, dict):
+            if 'id' in payload:
+                return [payload]
+            for key in ('items', 'users', 'results', 'data'):
+                nested = payload.get(key)
+                if isinstance(nested, list):
+                    return [item for item in nested if isinstance(item, dict)]
+        return []
+
+    @staticmethod
+    def _normalize_string_list(value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            items = [
+                str(item).strip()
+                for item in value
+                if item is not None and str(item).strip()
+            ]
+            return items
+        if isinstance(value, str):
+            normalized = value.strip()
+            return [normalized] if normalized else []
+        normalized = str(value).strip()
+        return [normalized] if normalized else []
+
+    def _parse_json_payload(self, value: str) -> Any:
+        if not isinstance(value, str):
+            return None
+        text = value.strip()
+        if not text:
+            return None
+        direct = self._try_parse_json(text)
+        if direct is not None:
+            return direct
+        for candidate in re.findall(
+            r'```(?:json)?\s*([\s\S]*?)\s*```',
+            text,
+            flags=re.IGNORECASE,
+        ):
+            parsed = self._try_parse_json(candidate)
+            if parsed is not None:
+                return parsed
+        decoder = json.JSONDecoder()
+        for index, char in enumerate(text):
+            if char not in '[{':
+                continue
+            try:
+                parsed, _ = decoder.raw_decode(text[index:])
+            except json.JSONDecodeError:
+                continue
+            return parsed
+        return None
+
+    @staticmethod
+    def _try_parse_json(value: str) -> Any:
+        try:
+            return json.loads(value)
+        except (TypeError, json.JSONDecodeError):
+            return None
 
     async def _extend_messages_with_missing_replies(
         self,

@@ -68,6 +68,41 @@ class UsersRepository(BaseRepository):
         )
         return dict(row) if row else None
 
+    async def upsert_conclusions(
+        self,
+        conclusions: list[dict[str, Any]],
+    ) -> int:
+        if not conclusions:
+            return 0
+        rows: list[tuple[int, dict[str, Any]]] = []
+        for item in conclusions:
+            if not isinstance(item, dict):
+                continue
+            user_id = item.get('id')
+            try:
+                user_id = int(user_id)
+            except (TypeError, ValueError):
+                continue
+            conclusion = item.get('conclusion')
+            if not isinstance(conclusion, dict):
+                continue
+            rows.append((user_id, conclusion))
+        if not rows:
+            return 0
+        async with self.pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO users (id, conclusion, updated_at)
+                VALUES ($1, $2, NOW())
+                ON CONFLICT (id)
+                DO UPDATE SET
+                    conclusion = EXCLUDED.conclusion,
+                    updated_at = NOW()
+                """,
+                rows,
+            )
+        return len(rows)
+
     async def ensure_users_exist(self, user_ids):
         if not user_ids:
             return
