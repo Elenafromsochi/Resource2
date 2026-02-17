@@ -74,7 +74,7 @@ class UsersRepository(BaseRepository):
     ) -> int:
         if not conclusions:
             return 0
-        rows: list[tuple[int, dict[str, Any]]] = []
+        incoming_by_id: dict[int, dict[str, Any]] = {}
         for item in conclusions:
             if not isinstance(item, dict):
                 continue
@@ -86,9 +86,37 @@ class UsersRepository(BaseRepository):
             conclusion = item.get('conclusion')
             if not isinstance(conclusion, dict):
                 continue
-            rows.append((user_id, conclusion))
-        if not rows:
+            existing_incoming = incoming_by_id.get(user_id)
+            if existing_incoming is None:
+                incoming_by_id[user_id] = conclusion
+            else:
+                incoming_by_id[user_id] = self._merge_conclusion_dicts(
+                    existing_incoming,
+                    conclusion,
+                )
+        if not incoming_by_id:
             return 0
+        existing_by_id: dict[int, dict[str, Any]] = {}
+        existing_rows = await self.pool.fetch(
+            'SELECT id, conclusion FROM users WHERE id = ANY($1)',
+            list(incoming_by_id.keys()),
+        )
+        for row in existing_rows:
+            existing_conclusion = row['conclusion']
+            if not isinstance(existing_conclusion, dict):
+                continue
+            existing_by_id[int(row['id'])] = existing_conclusion
+        rows: list[tuple[int, dict[str, Any]]] = []
+        for user_id, incoming_conclusion in incoming_by_id.items():
+            existing_conclusion = existing_by_id.get(user_id)
+            if existing_conclusion is None:
+                merged = incoming_conclusion
+            else:
+                merged = self._merge_conclusion_dicts(
+                    existing_conclusion,
+                    incoming_conclusion,
+                )
+            rows.append((user_id, merged))
         async with self.pool.acquire() as conn:
             await conn.executemany(
                 """
@@ -102,6 +130,49 @@ class UsersRepository(BaseRepository):
                 rows,
             )
         return len(rows)
+
+    @classmethod
+    def _merge_conclusion_dicts(
+        cls,
+        current: dict[str, Any],
+        incoming: dict[str, Any],
+    ) -> dict[str, Any]:
+        merged = dict(current)
+        for key, incoming_value in incoming.items():
+            if key not in merged:
+                merged[key] = incoming_value
+                continue
+            merged[key] = cls._merge_conclusion_values(
+                merged[key],
+                incoming_value,
+            )
+        return merged
+
+    @classmethod
+    def _merge_conclusion_values(cls, current: Any, incoming: Any) -> Any:
+        if current is None:
+            return incoming
+        if incoming is None:
+            return current
+        if isinstance(current, dict) and isinstance(incoming, dict):
+            return cls._merge_conclusion_dicts(current, incoming)
+        if isinstance(current, list) and isinstance(incoming, list):
+            return cls._merge_conclusion_lists(current, incoming)
+        if isinstance(current, list):
+            return cls._merge_conclusion_lists(current, [incoming])
+        if isinstance(incoming, list):
+            return cls._merge_conclusion_lists([current], incoming)
+        if current == incoming:
+            return current
+        return cls._merge_conclusion_lists([current], [incoming])
+
+    @staticmethod
+    def _merge_conclusion_lists(current: list[Any], incoming: list[Any]) -> list[Any]:
+        merged: list[Any] = []
+        for value in [*current, *incoming]:
+            if value not in merged:
+                merged.append(value)
+        return merged
 
     async def ensure_users_exist(self, user_ids):
         if not user_ids:
