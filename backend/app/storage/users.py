@@ -207,6 +207,28 @@ class UsersRepository(BaseRepository):
         )
         return [dict(row) for row in rows]
 
+    async def list_with_conclusions(
+        self,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        normalized_limit = 200
+        try:
+            normalized_limit = int(limit)
+        except (TypeError, ValueError):
+            normalized_limit = 200
+        normalized_limit = max(1, min(normalized_limit, 2000))
+        rows = await self.pool.fetch(
+            """
+            SELECT id, conclusion
+            FROM users
+            WHERE conclusion IS NOT NULL
+            ORDER BY updated_at DESC, id DESC
+            LIMIT $1
+            """,
+            normalized_limit,
+        )
+        return [dict(row) for row in rows]
+
     async def list(self, offset, limit, search: str | None = None):
         if search:
             search_value = search.strip()

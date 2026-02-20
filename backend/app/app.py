@@ -15,6 +15,7 @@ from .config import CORS_ORIGINS
 from .deepseek import DeepSeek
 from .exceptions import AppException
 from .mediator import Mediator
+from .monitoring import ChannelMonitoringService
 from .storage import Storage
 from .telegram import Telegram
 
@@ -25,13 +26,22 @@ async def lifespan(app: FastAPI):
     telegram = Telegram()
     deepseek = DeepSeek()
     mediator = Mediator(telegram, deepseek, storage)
+    monitoring_service = ChannelMonitoringService(
+        telegram=telegram,
+        deepseek=deepseek,
+        storage=storage,
+        mediator=mediator,
+    )
     await storage.init()
     await telegram.init()
+    await monitoring_service.init()
     app.state.storage = storage
     app.state.telegram = telegram
     app.state.deepseek = deepseek
     app.state.mediator = mediator
+    app.state.monitoring_service = monitoring_service
     yield
+    await monitoring_service.close()
     await telegram.close()
     await storage.close()
 
