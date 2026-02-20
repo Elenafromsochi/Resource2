@@ -14,12 +14,29 @@ class ChannelOut(BaseModel):
     title: str
     channel_type: str
     link: str | None
+    monitoring_enabled: bool = False
+    monitoring_prompt_id: int | None = None
+    monitoring_last_message_id: int | None = None
+    monitoring_last_message_at: datetime | None = None
+    monitoring_last_error: str | None = None
+    monitoring_updated_at: datetime | None = None
     updated_at: datetime | None = None
 
 
 class ChannelListResponse(BaseModel):
     items: list[ChannelOut]
     next_offset: int | None
+
+
+class ChannelMonitoringBulkUpdateRequest(BaseModel):
+    channel_ids: list[int] = Field(default_factory=list)
+    enabled: bool
+    prompt_id: int | None = None
+
+
+class ChannelMonitoringBulkUpdateResponse(BaseModel):
+    updated: int
+    channels: list[ChannelOut] = Field(default_factory=list)
 
 
 class ChannelDetailsResponse(BaseModel):

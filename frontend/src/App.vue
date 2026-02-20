@@ -97,6 +97,50 @@
             </button>
           </div>
         </div>
+        <div class="row compact analysis-monitoring-actions">
+          <button
+            type="button"
+            :disabled="
+              cacheRefreshing ||
+              userListLoading ||
+              userStatsRefreshing ||
+              renderMessagesLoading ||
+              analyzeMessagesLoading ||
+              monitoringSaving ||
+              !canEnableMonitoring
+            "
+            @click="enableMonitoringForSelectedChannels"
+          >
+            {{
+              monitoringSaving
+                ? "Сохранение..."
+                : "Включить мониторинг выбранных каналов"
+            }}
+          </button>
+          <button
+            type="button"
+            class="secondary-button"
+            :disabled="
+              cacheRefreshing ||
+              userListLoading ||
+              userStatsRefreshing ||
+              renderMessagesLoading ||
+              analyzeMessagesLoading ||
+              monitoringSaving ||
+              !canDisableMonitoring
+            "
+            @click="disableMonitoringForSelectedChannels"
+          >
+            {{
+              monitoringSaving
+                ? "Сохранение..."
+                : "Выключить мониторинг выбранных каналов"
+            }}
+          </button>
+          <span v-if="monitoringUpdateResult" class="monitoring-note">
+            {{ monitoringUpdateResult }}
+          </span>
+        </div>
         <div class="analysis-prompt">
           <label class="field-label" for="analysis-prompt-select">
             Базовый промпт для анализа
@@ -134,6 +178,7 @@
                 <th>Название</th>
                 <th>Username</th>
                 <th>Тип</th>
+                <th>Мониторинг</th>
               </tr>
             </thead>
             <tbody>
@@ -161,9 +206,20 @@
                 <td>{{ channel.title }}</td>
                 <td>{{ channel.username || "-" }}</td>
                 <td>{{ channel.channel_type }}</td>
+                <td>
+                  <span
+                    class="monitoring-status"
+                    :class="{ active: channel.monitoring_enabled }"
+                  >
+                    {{ channel.monitoring_enabled ? "Вкл" : "Выкл" }}
+                  </span>
+                  <span v-if="channel.monitoring_enabled">
+                    · {{ getPromptTitle(channel.monitoring_prompt_id) }}
+                  </span>
+                </td>
               </tr>
               <tr v-if="sortedChannelsForSelect.length === 0">
-                <td colspan="5" class="muted">Нет каналов</td>
+                <td colspan="6" class="muted">Нет каналов</td>
               </tr>
             </tbody>
           </table>
@@ -390,6 +446,9 @@
           </div>
           <button :disabled="channelLoading" @click="addChannel">
             Добавить
+          </button>
+          <button :disabled="channelLoading" @click="addDefaultBarterboardChannel">
+            Добавить barterboard
           </button>
           <button :disabled="channelLoading" @click="importDialogs">
             Импортировать из диалогов
@@ -727,6 +786,7 @@ import { ANALYSIS_RANGE_MAX_DAYS } from "./config";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 const api = axios.create({ baseURL: API_BASE });
 const TELEGRAM_AVATAR_BASE = "https://t.me/i/userpic/320/";
+const DEFAULT_MONITORED_CHANNEL = "https://t.me/barterboard";
 
 const channels = ref([]);
 const channelOffset = ref(0);
@@ -772,6 +832,8 @@ const selectedAnalysisPromptId = ref(null);
 const analyzeMessagesLoading = ref(false);
 const analyzeMessagesResult = ref(null);
 const analyzeMessagesError = ref(null);
+const monitoringSaving = ref(false);
+const monitoringUpdateResult = ref("");
 
 const prompts = ref([]);
 const promptsLoading = ref(false);
@@ -844,6 +906,15 @@ const formatSelectedChannelLabel = (channelId) => {
   return "Канал";
 };
 
+const getPromptTitle = (promptId) => {
+  const normalizedPromptId = Number(promptId);
+  if (!Number.isInteger(normalizedPromptId) || normalizedPromptId <= 0) {
+    return "Промпт не выбран";
+  }
+  const prompt = prompts.value.find((item) => item.id === normalizedPromptId);
+  return prompt?.title || `Промпт ${normalizedPromptId}`;
+};
+
 const toCount = (value) => {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
@@ -900,6 +971,20 @@ const canAnalyzeSelectedChannels = computed(() => {
     selectedPromptId > 0 &&
     Array.isArray(selectedChannelIds.value) &&
     selectedChannelIds.value.length > 0
+  );
+});
+const canEnableMonitoring = computed(() => {
+  const selectedPromptId = Number(selectedAnalysisPromptId.value);
+  return (
+    Number.isInteger(selectedPromptId) &&
+    selectedPromptId > 0 &&
+    Array.isArray(selectedChannelIds.value) &&
+    selectedChannelIds.value.length > 0
+  );
+});
+const canDisableMonitoring = computed(() => {
+  return (
+    Array.isArray(selectedChannelIds.value) && selectedChannelIds.value.length > 0
   );
 });
 const cacheRefreshChannels = computed(() => {
@@ -1318,6 +1403,12 @@ const addChannel = async () => {
   await fetchChannelsForSelect();
 };
 
+const addDefaultBarterboardChannel = async () => {
+  await api.post("/channels", { value: DEFAULT_MONITORED_CHANNEL });
+  await fetchChannels(true);
+  await fetchChannelsForSelect();
+};
+
 const removeChannel = async (channelId) => {
   await api.delete(`/channels/${channelId}`);
   await fetchChannels(true);
@@ -1332,6 +1423,49 @@ const importDialogs = async () => {
   await api.post("/channels/import-dialogs");
   await fetchChannels(true);
   await fetchChannelsForSelect();
+};
+
+const updateMonitoringForSelectedChannels = async (enabled) => {
+  if (!Array.isArray(selectedChannelIds.value) || selectedChannelIds.value.length === 0) {
+    monitoringUpdateResult.value = "Выберите хотя бы один канал.";
+    return;
+  }
+  if (enabled) {
+    const promptId = Number(selectedAnalysisPromptId.value);
+    if (!Number.isInteger(promptId) || promptId <= 0) {
+      monitoringUpdateResult.value = "Выберите промпт для мониторинга.";
+      return;
+    }
+  }
+  monitoringSaving.value = true;
+  monitoringUpdateResult.value = "";
+  try {
+    const payload = {
+      channel_ids: selectedChannelIds.value,
+      enabled,
+      prompt_id: enabled ? Number(selectedAnalysisPromptId.value) : null,
+    };
+    const { data } = await api.post("/channels/monitoring", payload);
+    const updatedCount = Number(data?.updated || 0);
+    monitoringUpdateResult.value = enabled
+      ? `Мониторинг включен для ${updatedCount} каналов.`
+      : `Мониторинг выключен для ${updatedCount} каналов.`;
+    await fetchChannels(true);
+    await fetchChannelsForSelect();
+  } catch (error) {
+    const detail = error?.response?.data?.detail;
+    monitoringUpdateResult.value = detail || error?.message || "Ошибка обновления мониторинга.";
+  } finally {
+    monitoringSaving.value = false;
+  }
+};
+
+const enableMonitoringForSelectedChannels = async () => {
+  await updateMonitoringForSelectedChannels(true);
+};
+
+const disableMonitoringForSelectedChannels = async () => {
+  await updateMonitoringForSelectedChannels(false);
 };
 
 const refreshCache = async () => {
@@ -1493,6 +1627,10 @@ watch(userSearch, () => {
   }, SEARCH_DEBOUNCE_MS);
 });
 
+watch([selectedChannelIds, selectedAnalysisPromptId], () => {
+  monitoringUpdateResult.value = "";
+});
+
 const toggleAllChannels = (event) => {
   if (event.target.checked) {
     selectedChannelIds.value = channelsForSelect.value.map(
@@ -1649,6 +1787,24 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.analysis-monitoring-actions {
+  align-items: center;
+}
+
+.monitoring-note {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.monitoring-status {
+  color: #8c94a1;
+  font-weight: 600;
+}
+
+.monitoring-status.active {
+  color: #0f8a42;
 }
 
 .analysis-prompt {
