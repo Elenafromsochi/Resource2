@@ -44,53 +44,28 @@
           <div class="analysis-actions">
             <button
               type="button"
-              :disabled="
-                cacheRefreshing ||
-                userListLoading ||
-                userStatsRefreshing ||
-                renderMessagesLoading
-              "
+              :disabled="analysisBusy"
               @click="refreshCache"
             >
               Выгрузка сообщений
             </button>
             <button
               type="button"
-              :disabled="
-                cacheRefreshing ||
-                userListLoading ||
-                userStatsRefreshing ||
-                renderMessagesLoading ||
-                !canRenderMessages
-              "
+              :disabled="analysisBusy || !canRenderMessages"
               @click="renderMessages"
             >
               Вывести сообщения
             </button>
             <button
               type="button"
-              :disabled="
-                cacheRefreshing ||
-                userListLoading ||
-                userStatsRefreshing ||
-                renderMessagesLoading ||
-                analyzeMessagesLoading ||
-                !canAnalyzeRenderedMessages
-              "
+              :disabled="analysisBusy || !canAnalyzeRenderedMessages"
               @click="analyzeRenderedMessages"
             >
               {{ analyzeMessagesLoading ? "Анализ..." : "Анализ через DeepSeek" }}
             </button>
             <button
               type="button"
-              :disabled="
-                cacheRefreshing ||
-                userListLoading ||
-                userStatsRefreshing ||
-                renderMessagesLoading ||
-                analyzeMessagesLoading ||
-                !canAnalyzeSelectedChannels
-              "
+              :disabled="analysisBusy || !canAnalyzeSelectedChannels"
               @click="analyzeSelectedChannelsMessages"
             >
               {{ analyzeMessagesLoading ? "Анализ..." : "Анализ выбранных каналов" }}
@@ -100,15 +75,7 @@
         <div class="row compact analysis-monitoring-actions">
           <button
             type="button"
-            :disabled="
-              cacheRefreshing ||
-              userListLoading ||
-              userStatsRefreshing ||
-              renderMessagesLoading ||
-              analyzeMessagesLoading ||
-              monitoringSaving ||
-              !canEnableMonitoring
-            "
+            :disabled="analysisBusy || !canEnableMonitoring"
             @click="enableMonitoringForSelectedChannels"
           >
             {{
@@ -120,15 +87,7 @@
           <button
             type="button"
             class="secondary-button"
-            :disabled="
-              cacheRefreshing ||
-              userListLoading ||
-              userStatsRefreshing ||
-              renderMessagesLoading ||
-              analyzeMessagesLoading ||
-              monitoringSaving ||
-              !canDisableMonitoring
-            "
+            :disabled="analysisBusy || !canDisableMonitoring"
             @click="disableMonitoringForSelectedChannels"
           >
             {{
@@ -635,7 +594,7 @@
           </div>
           <button
             class="align-right"
-            :disabled="userStatsRefreshing || userListLoading"
+            :disabled="userStatsRefreshing || userLoading"
             @click="refreshUserStats"
           >
             Обновить
@@ -820,7 +779,6 @@ const DEFAULT_ANALYSIS_LAST_DAYS = 3;
 const rangeEndDays = ref(
   Math.min(analysisRangeMaxDays, DEFAULT_ANALYSIS_LAST_DAYS - 1),
 );
-const userListLoading = ref(false);
 const cacheRefreshing = ref(false);
 const userStatsRefreshing = ref(false);
 const cacheRefreshResult = ref(null);
@@ -985,6 +943,16 @@ const canEnableMonitoring = computed(() => {
 const canDisableMonitoring = computed(() => {
   return (
     Array.isArray(selectedChannelIds.value) && selectedChannelIds.value.length > 0
+  );
+});
+const analysisBusy = computed(() => {
+  return (
+    cacheRefreshing.value ||
+    userLoading.value ||
+    userStatsRefreshing.value ||
+    renderMessagesLoading.value ||
+    analyzeMessagesLoading.value ||
+    monitoringSaving.value
   );
 });
 const cacheRefreshChannels = computed(() => {
@@ -1315,6 +1283,11 @@ const fetchChannelsForSelect = async () => {
   channelsForSelect.value = data;
 };
 
+const refreshChannelLists = async () => {
+  await fetchChannels(true);
+  await fetchChannelsForSelect();
+};
+
 const syncSelectedAnalysisPrompt = () => {
   if (!Array.isArray(prompts.value) || prompts.value.length === 0) {
     selectedAnalysisPromptId.value = null;
@@ -1399,20 +1372,17 @@ const addChannel = async () => {
   }
   await api.post("/channels", { value });
   newChannelValue.value = "";
-  await fetchChannels(true);
-  await fetchChannelsForSelect();
+  await refreshChannelLists();
 };
 
 const addDefaultBarterboardChannel = async () => {
   await api.post("/channels", { value: DEFAULT_MONITORED_CHANNEL });
-  await fetchChannels(true);
-  await fetchChannelsForSelect();
+  await refreshChannelLists();
 };
 
 const removeChannel = async (channelId) => {
   await api.delete(`/channels/${channelId}`);
-  await fetchChannels(true);
-  await fetchChannelsForSelect();
+  await refreshChannelLists();
   if (selectedChannelDetailsId.value === channelId) {
     selectedChannelDetailsId.value = null;
     channelDetails.value = null;
@@ -1421,8 +1391,7 @@ const removeChannel = async (channelId) => {
 
 const importDialogs = async () => {
   await api.post("/channels/import-dialogs");
-  await fetchChannels(true);
-  await fetchChannelsForSelect();
+  await refreshChannelLists();
 };
 
 const updateMonitoringForSelectedChannels = async (enabled) => {
@@ -1450,8 +1419,7 @@ const updateMonitoringForSelectedChannels = async (enabled) => {
     monitoringUpdateResult.value = enabled
       ? `Мониторинг включен для ${updatedCount} каналов.`
       : `Мониторинг выключен для ${updatedCount} каналов.`;
-    await fetchChannels(true);
-    await fetchChannelsForSelect();
+    await refreshChannelLists();
   } catch (error) {
     const detail = error?.response?.data?.detail;
     monitoringUpdateResult.value = detail || error?.message || "Ошибка обновления мониторинга.";

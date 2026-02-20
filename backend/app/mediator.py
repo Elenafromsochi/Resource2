@@ -15,6 +15,8 @@ from telethon.tl.types import Channel
 from telethon.tl.types import Chat
 from telethon.tl.types import User
 
+from .common import normalize_message_text
+from .common import safe_int
 from .deepseek import DeepSeek
 from .exceptions import AppException
 from .exceptions import ChannelEntityTypeError
@@ -824,20 +826,11 @@ class Mediator:
 
     @staticmethod
     def _safe_int(value: Any) -> int | None:
-        if value is None:
-            return None
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return None
+        return safe_int(value)
 
     @staticmethod
     def _normalize_message_text(value: Any) -> str:
-        if not isinstance(value, str):
-            return ''
-        text = value
-        text = ' '.join(text.splitlines())
-        return text.strip()
+        return normalize_message_text(value)
 
     @classmethod
     def _sanitize_message_payload(cls, value: Any) -> Any:

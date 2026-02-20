@@ -11,6 +11,9 @@ from telethon import events
 from telethon.tl.types import PeerChannel
 from telethon.tl.types import PeerChat
 
+from .common import normalize_datetime
+from .common import normalize_message_text
+from .common import safe_int
 from .config import MONITOR_DEFAULT_CHANNELS
 from .config import MONITOR_USERS_CONTEXT_LIMIT
 from .deepseek import DeepSeek
@@ -93,7 +96,7 @@ class ChannelMonitoringService:
         channel = await self.storage.channels.get(channel_id)
         if not channel or not bool(channel.get('monitoring_enabled')):
             return
-        prompt_id = self._safe_int(channel.get('monitoring_prompt_id'))
+        prompt_id = safe_int(channel.get('monitoring_prompt_id'))
         if prompt_id is None:
             return
         raw_message = message.to_dict() if message is not None else None
@@ -102,13 +105,13 @@ class ChannelMonitoringService:
         normalized_message = self.mediator._sanitize_message_payload(raw_message)
         if not isinstance(normalized_message, dict):
             return
-        message_id = self._safe_int(normalized_message.get('id'))
+        message_id = safe_int(normalized_message.get('id'))
         if message_id is None:
-            message_id = self._safe_int(getattr(message, 'id', None))
+            message_id = safe_int(getattr(message, 'id', None))
         if message_id is None:
             return
         normalized_message['id'] = message_id
-        message_date = self._normalize_message_date(
+        message_date = normalize_datetime(
             getattr(message, 'date', None) or normalized_message.get('date'),
         )
         if message_date is None:
@@ -222,18 +225,18 @@ class ChannelMonitoringService:
         message: dict[str, Any],
         users: list[dict[str, Any]],
     ) -> dict[str, Any]:
-        message_id = self._safe_int(message.get('id'))
+        message_id = safe_int(message.get('id'))
         sender_id = self.mediator._get_message_user_id(message)
         reply_message_id = self.mediator._get_reply_message_id(message)
-        message_text = self._normalize_message_text(message.get('message'))
+        message_text = normalize_message_text(message.get('message'))
         if not message_text:
-            message_text = self._normalize_message_text(message.get('text'))
-        message_date = self._normalize_message_date(message.get('date'))
+            message_text = normalize_message_text(message.get('text'))
+        message_date = normalize_datetime(message.get('date'))
         normalized_users: list[dict[str, Any]] = []
         for user in users:
             if not isinstance(user, dict):
                 continue
-            user_id = self._safe_int(user.get('id'))
+            user_id = safe_int(user.get('id'))
             if user_id is None:
                 continue
             normalized_users.append(
@@ -244,7 +247,7 @@ class ChannelMonitoringService:
             )
         return {
             'channel': {
-                'id': self._safe_int(channel.get('id')),
+                'id': safe_int(channel.get('id')),
                 'title': channel.get('title'),
                 'username': channel.get('username'),
                 'link': channel.get('link'),
@@ -258,37 +261,6 @@ class ChannelMonitoringService:
             },
             'users': normalized_users,
         }
-
-    @staticmethod
-    def _normalize_message_text(value: Any) -> str:
-        if not isinstance(value, str):
-            return ''
-        return ' '.join(value.splitlines()).strip()
-
-    @staticmethod
-    def _safe_int(value: Any) -> int | None:
-        if value is None:
-            return None
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return None
-
-    @staticmethod
-    def _normalize_message_date(value: Any) -> datetime | None:
-        if isinstance(value, datetime):
-            if value.tzinfo is not None:
-                return value
-            return value.replace(tzinfo=timezone.utc)
-        if isinstance(value, str):
-            try:
-                parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-            except ValueError:
-                return None
-            if parsed.tzinfo is not None:
-                return parsed
-            return parsed.replace(tzinfo=timezone.utc)
-        return None
 
     @staticmethod
     def _extract_channel_id(message: Any) -> int | None:

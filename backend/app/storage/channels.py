@@ -1,34 +1,12 @@
 from typing import Any
 
+from app.common import normalize_int_list
+from app.common import safe_int
+
 from .base import BaseRepository
 
 
 class ChannelsRepository(BaseRepository):
-    @staticmethod
-    def _safe_int(value: Any) -> int | None:
-        if value is None:
-            return None
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return None
-
-    @classmethod
-    def _normalize_channel_ids(cls, channel_ids: list[int] | None) -> list[int]:
-        if not channel_ids:
-            return []
-        normalized: list[int] = []
-        seen: set[int] = set()
-        for channel_id in channel_ids:
-            normalized_channel_id = cls._safe_int(channel_id)
-            if normalized_channel_id is None:
-                continue
-            if normalized_channel_id in seen:
-                continue
-            seen.add(normalized_channel_id)
-            normalized.append(normalized_channel_id)
-        return normalized
-
     async def upsert(self, channel):
         row = await self.pool.fetchrow(
             """
@@ -119,10 +97,10 @@ class ChannelsRepository(BaseRepository):
         enabled: bool,
         prompt_id: int | None,
     ) -> list[dict[str, Any]]:
-        normalized = self._normalize_channel_ids(channel_ids)
+        normalized = normalize_int_list(channel_ids)
         if not normalized:
             return []
-        normalized_prompt_id = self._safe_int(prompt_id)
+        normalized_prompt_id = safe_int(prompt_id)
         if not enabled:
             normalized_prompt_id = None
         rows = await self.pool.fetch(
@@ -148,37 +126,45 @@ class ChannelsRepository(BaseRepository):
         message_id: int,
         message_date: Any,
     ) -> None:
-        normalized_channel_id = self._safe_int(channel_id)
-        normalized_message_id = self._safe_int(message_id)
+        normalized_channel_id = safe_int(channel_id)
+        normalized_message_id = safe_int(message_id)
         if normalized_channel_id is None or normalized_message_id is None:
             return
-        await self.pool.execute(
-            """
-            UPDATE channels
-            SET monitoring_last_message_id = $2,
-                monitoring_last_message_at = $3,
-                monitoring_last_error = NULL,
-                monitoring_updated_at = NOW(),
-                updated_at = NOW()
-            WHERE id = $1
-            """,
+        await self._update_monitoring_state(
             normalized_channel_id,
-            normalized_message_id,
-            message_date,
+            last_message_id=normalized_message_id,
+            last_message_at=message_date,
+            last_error=None,
         )
 
     async def set_monitoring_error(self, channel_id: int, error: str) -> None:
-        normalized_channel_id = self._safe_int(channel_id)
+        normalized_channel_id = safe_int(channel_id)
         if normalized_channel_id is None:
             return
+        await self._update_monitoring_state(
+            normalized_channel_id,
+            last_error=str(error or 'Monitoring error')[:4000],
+        )
+
+    async def _update_monitoring_state(
+        self,
+        channel_id: int,
+        last_message_id: int | None = None,
+        last_message_at: Any = None,
+        last_error: str | None = None,
+    ) -> None:
         await self.pool.execute(
             """
             UPDATE channels
-            SET monitoring_last_error = $2,
+            SET monitoring_last_message_id = COALESCE($2, monitoring_last_message_id),
+                monitoring_last_message_at = COALESCE($3, monitoring_last_message_at),
+                monitoring_last_error = $4,
                 monitoring_updated_at = NOW(),
                 updated_at = NOW()
             WHERE id = $1
             """,
-            normalized_channel_id,
-            str(error or 'Monitoring error')[:4000],
+            channel_id,
+            last_message_id,
+            last_message_at,
+            last_error,
         )

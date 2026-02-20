@@ -1,40 +1,20 @@
 from datetime import datetime
 from typing import Any
 
+from app.common import normalize_int_list
+from app.common import safe_int
+
 from .base import BaseRepository
 
 
 class MessagesRepository(BaseRepository):
-    @staticmethod
-    def _safe_int(value: Any) -> int | None:
-        if value is None:
-            return None
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return None
-
-    @staticmethod
-    def _normalize_message_ids(message_ids: list[int] | None) -> list[int]:
-        if not message_ids:
-            return []
-        normalized: list[int] = []
-        for message_id in message_ids:
-            if message_id is None:
-                continue
-            try:
-                normalized.append(int(message_id))
-            except (TypeError, ValueError):
-                continue
-        return normalized
-
     async def list_by_channel_and_date(
         self,
         channel_id: int,
         date_from: datetime,
         date_to: datetime,
     ) -> list[dict[str, Any]]:
-        normalized_channel_id = self._safe_int(channel_id)
+        normalized_channel_id = safe_int(channel_id)
         if normalized_channel_id is None:
             return []
         rows = await self.pool.fetch(
@@ -56,10 +36,10 @@ class MessagesRepository(BaseRepository):
         channel_id: int,
         message_ids: list[int],
     ) -> list[dict[str, Any]]:
-        normalized_channel_id = self._safe_int(channel_id)
+        normalized_channel_id = safe_int(channel_id)
         if normalized_channel_id is None:
             return []
-        normalized = self._normalize_message_ids(message_ids)
+        normalized = normalize_int_list(message_ids)
         if not normalized:
             return []
         rows = await self.pool.fetch(
@@ -74,20 +54,6 @@ class MessagesRepository(BaseRepository):
             normalized,
         )
         return self._rows_to_details(rows)
-
-    @staticmethod
-    def _normalize_user_ids(user_ids: list[int] | None) -> list[int]:
-        if not user_ids:
-            return []
-        normalized: list[int] = []
-        for user_id in user_ids:
-            if user_id is None:
-                continue
-            try:
-                normalized.append(int(user_id))
-            except (TypeError, ValueError):
-                continue
-        return normalized
 
     def _rows_to_details(self, rows: list[Any]) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
@@ -108,7 +74,7 @@ class MessagesRepository(BaseRepository):
         if not messages:
             return {'processed': 0, 'upserted': 0, 'modified': 0, 'skipped': 0}
 
-        normalized_channel_id = self._safe_int(channel_id)
+        normalized_channel_id = safe_int(channel_id)
         if normalized_channel_id is None:
             return {
                 'processed': 0,
@@ -123,7 +89,7 @@ class MessagesRepository(BaseRepository):
             if not isinstance(message, dict):
                 skipped += 1
                 continue
-            message_id = self._safe_int(message.get('id'))
+            message_id = safe_int(message.get('id'))
             message_date = message.get('date')
             if message_id is None or message_date is None:
                 skipped += 1
@@ -233,8 +199,8 @@ class MessagesRepository(BaseRepository):
         )
         result: list[dict[str, Any]] = []
         for row in rows:
-            user_id = self._safe_int(row['user_id'])
-            total = self._safe_int(row['total']) or 0
+            user_id = safe_int(row['user_id'])
+            total = safe_int(row['total']) or 0
             if user_id is None:
                 continue
             channels: list[dict[str, int]] = []
@@ -255,7 +221,7 @@ class MessagesRepository(BaseRepository):
         self,
         user_ids: list[int],
     ) -> list[dict[str, Any]]:
-        normalized = self._normalize_user_ids(user_ids)
+        normalized = normalize_int_list(user_ids)
         if not normalized:
             return []
         return await self._aggregate_user_message_stats(normalized)

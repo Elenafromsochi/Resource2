@@ -1,5 +1,7 @@
 from typing import Any
 
+from app.common import normalize_int_list
+
 from .base import BaseRepository
 
 
@@ -189,16 +191,7 @@ class UsersRepository(BaseRepository):
             )
 
     async def list_by_ids(self, user_ids: list[int]) -> list[dict[str, Any]]:
-        if not user_ids:
-            return []
-        normalized: list[int] = []
-        for user_id in user_ids:
-            if user_id is None:
-                continue
-            try:
-                normalized.append(int(user_id))
-            except (TypeError, ValueError):
-                continue
+        normalized = normalize_int_list(user_ids)
         if not normalized:
             return []
         rows = await self.pool.fetch(
