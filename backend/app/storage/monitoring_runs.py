@@ -1,27 +1,20 @@
 from typing import Any
 
+from app.common import safe_int
+
 from .base import BaseRepository
 
 
 class MonitoringRunsRepository(BaseRepository):
-    @staticmethod
-    def _safe_int(value: Any) -> int | None:
-        if value is None:
-            return None
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return None
-
     async def has_successful_result(
         self,
         channel_id: int,
         message_id: int,
         prompt_id: int,
     ) -> bool:
-        normalized_channel_id = self._safe_int(channel_id)
-        normalized_message_id = self._safe_int(message_id)
-        normalized_prompt_id = self._safe_int(prompt_id)
+        normalized_channel_id = safe_int(channel_id)
+        normalized_message_id = safe_int(message_id)
+        normalized_prompt_id = safe_int(prompt_id)
         if (
             normalized_channel_id is None
             or normalized_message_id is None
@@ -90,9 +83,9 @@ class MonitoringRunsRepository(BaseRepository):
         error: str | None,
         status: str,
     ) -> dict[str, Any] | None:
-        normalized_channel_id = self._safe_int(channel_id)
-        normalized_message_id = self._safe_int(message_id)
-        normalized_prompt_id = self._safe_int(prompt_id)
+        normalized_channel_id = safe_int(channel_id)
+        normalized_message_id = safe_int(message_id)
+        normalized_prompt_id = safe_int(prompt_id)
         if (
             normalized_channel_id is None
             or normalized_message_id is None
