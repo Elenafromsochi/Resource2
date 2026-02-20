@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List
 
 from app.common import normalize_int_list
 from app.common import safe_int
@@ -93,10 +93,10 @@ class ChannelsRepository(BaseRepository):
 
     async def bulk_update_monitoring(
         self,
-        channel_ids: list[int],
+        channel_ids: List[int],
         enabled: bool,
         prompt_id: int | None,
-    ) -> list[dict[str, Any]]:
+    ) -> List[dict[str, Any]]:
         normalized = normalize_int_list(channel_ids)
         if not normalized:
             return []
