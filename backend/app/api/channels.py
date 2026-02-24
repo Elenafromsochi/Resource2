@@ -2,15 +2,11 @@ from fastapi import APIRouter
 from fastapi import Query
 from fastapi import Request
 
-from app.exceptions import AppException
-from app.exceptions import PromptNotFoundError
 from app.schemas import AnalyzeRenderedMessagesRequest
 from app.schemas import AnalyzeRenderedMessagesResponse
 from app.schemas import ChannelCreate
 from app.schemas import ChannelDetailsResponse
 from app.schemas import ChannelListResponse
-from app.schemas import ChannelMonitoringBulkUpdateRequest
-from app.schemas import ChannelMonitoringBulkUpdateResponse
 from app.schemas import ChannelOut
 from app.schemas import AnalyzeSelectedChannelsRequest
 from app.schemas import RefreshMessagesRequest
@@ -52,32 +48,6 @@ async def list_channels(
 @router.get('/all', response_model=list[ChannelOut])
 async def list_all_channels(request: Request):
     return await request.app.state.storage.channels.list_all()
-
-
-@router.post('/monitoring', response_model=ChannelMonitoringBulkUpdateResponse)
-async def update_channels_monitoring(
-    payload: ChannelMonitoringBulkUpdateRequest,
-    request: Request,
-):
-    channel_ids = payload.channel_ids or []
-    if not channel_ids:
-        raise AppException('No channels selected for monitoring update')
-    prompt_id = payload.prompt_id
-    if payload.enabled:
-        if prompt_id is None:
-            raise AppException('Prompt is required to enable monitoring')
-        prompt = await request.app.state.storage.prompts.get(prompt_id)
-        if not prompt:
-            raise PromptNotFoundError()
-    updated_channels = await request.app.state.storage.channels.bulk_update_monitoring(
-        channel_ids=channel_ids,
-        enabled=payload.enabled,
-        prompt_id=prompt_id,
-    )
-    return {
-        'updated': len(updated_channels),
-        'channels': updated_channels,
-    }
 
 
 @router.get('/{channel_id}', response_model=ChannelDetailsResponse)

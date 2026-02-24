@@ -27,14 +27,6 @@ CREATE TABLE IF NOT EXISTS prompts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-ALTER TABLE channels ADD COLUMN IF NOT EXISTS monitoring_enabled BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE channels ADD COLUMN IF NOT EXISTS monitoring_prompt_id BIGINT REFERENCES prompts(id) ON DELETE SET NULL;
-ALTER TABLE channels ADD COLUMN IF NOT EXISTS monitoring_last_message_id BIGINT;
-ALTER TABLE channels ADD COLUMN IF NOT EXISTS monitoring_last_message_at TIMESTAMPTZ;
-ALTER TABLE channels ADD COLUMN IF NOT EXISTS monitoring_last_error TEXT;
-ALTER TABLE channels ADD COLUMN IF NOT EXISTS monitoring_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
-CREATE INDEX IF NOT EXISTS idx_channels_monitoring_enabled ON channels (monitoring_enabled);
-
 CREATE TABLE IF NOT EXISTS messages (
     channel_id BIGINT NOT NULL,
     message_id BIGINT NOT NULL,
@@ -44,22 +36,6 @@ CREATE TABLE IF NOT EXISTS messages (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (channel_id, message_id)
 );
-
-CREATE TABLE IF NOT EXISTS message_monitoring_runs (
-    channel_id BIGINT NOT NULL,
-    message_id BIGINT NOT NULL,
-    prompt_id BIGINT NOT NULL,
-    request_payload JSONB NOT NULL,
-    response_text TEXT,
-    error TEXT,
-    status TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (channel_id, message_id, prompt_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_message_monitoring_runs_status_created_at
-    ON message_monitoring_runs (status, created_at DESC);
 
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS date TIMESTAMPTZ;
 UPDATE messages
