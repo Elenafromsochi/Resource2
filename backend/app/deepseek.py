@@ -1,5 +1,3 @@
-import json
-
 from openai import AsyncOpenAI
 
 from .config import DEEPSEEK_API_KEY
@@ -58,25 +56,20 @@ class DeepSeek:
     async def merge_conclusions(
         self,
         base_prompt: str,
-        items: list[dict],
+        analysis_content: str,
+        existing_conclusions_content: str,
     ) -> str:
-        """
-        Ask the model to merge existing and new conclusions per user.
-        items: list of {user_id, existing, new} (each conclusion is a dict).
-        Returns raw response (expected: JSON array of {id, ...merged conclusion}).
-        """
-        if not items:
-            return '[]'
-        payload = json.dumps(items, ensure_ascii=False, indent=2)
-        system = (base_prompt or '').strip() or 'Ты помощник по анализу данных.'
+        """Pass two JSON structures to the model. System prompt from DB only."""
+        system = (base_prompt or '').strip()
         completion = await self.client.chat.completions.create(
             model=DEEPSEEK_MODEL,
             messages=[
                 {'role': 'system', 'content': system},
-                {'role': 'user', 'content': payload},
+                {'role': 'user', 'content': analysis_content},
+                {'role': 'user', 'content': existing_conclusions_content},
             ],
             stream=False,
         )
         if not completion.choices:
-            return '[]'
+            return ''
         return self._normalize_chat_content(completion.choices[0].message.content)

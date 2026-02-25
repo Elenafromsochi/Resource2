@@ -420,16 +420,6 @@ class Mediator:
             if not analysis:
                 raise AppException('DeepSeek returned an empty analysis')
             analyses.append(analysis)
-        new_conclusions_by_id = self._aggregate_conclusions_from_analyses(analyses)
-        if not new_conclusions_by_id:
-            raise AppException(
-                'DeepSeek returned invalid analysis format. '
-                'Expected a JSON list of objects with id.'
-            )
-        merge_result = await self._merge_and_save_conclusions(
-            merge_prompt_text,
-            new_conclusions_by_id,
-        )
         if len(analyses) == 1:
             analysis_text = analyses[0]
         else:
@@ -437,6 +427,18 @@ class Mediator:
                 f'--- CHUNK {index}/{total_chunks} ---\n{analysis}'
                 for index, analysis in enumerate(analyses, start=1)
             )
+        new_conclusions_by_id = self._aggregate_conclusions_from_analyses(analyses)
+        if not new_conclusions_by_id:
+            raise AppException(
+                'DeepSeek returned invalid analysis format. '
+                'Expected a JSON list of objects with id.'
+            )
+        user_ids = list(new_conclusions_by_id.keys())
+        merge_result = await self._merge_and_save_conclusions(
+            merge_prompt_text,
+            analysis_text,
+            user_ids,
+        )
         return analysis_text, merge_result
 
     def _split_analysis_message_chunks(
@@ -496,93 +498,79 @@ class Mediator:
         self,
         analyses: list[str],
     ) -> dict[int, dict[str, Any]]:
-        """Extract and aggregate conclusions by user_id from all analysis chunks (last wins)."""
+        """Extract and aggregate by user_id from analysis chunks (last wins). No 'conclusion' in response."""
         result: dict[int, dict[str, Any]] = {}
         for analysis in analyses:
-            for item in self._extract_user_conclusions(analysis):
-                user_id = item.get('id')
-                conclusion = item.get('conclusion')
-                if user_id is not None and isinstance(conclusion, dict):
-                    result[int(user_id)] = conclusion
+            for item in self._extract_user_entries(analysis):
+                user_id = self._safe_int(item.get('id'))
+                if user_id is None:
+                    continue
+                rest = {k: v for k, v in item.items() if k != 'id'}
+                if isinstance(rest, dict) and rest:
+                    result[int(user_id)] = rest
         return result
 
     async def _merge_and_save_conclusions(
         self,
         prompt_text: str,
-        new_conclusions_by_id: dict[int, dict[str, Any]],
-    ) -> str | None:
-        """Load existing conclusions from DB; for users with existing, merge via LLM; then save all.
-        Returns raw merge response from DeepSeek, or None if no merge was performed."""
-        if not new_conclusions_by_id:
-            return None
-        user_ids = list(new_conclusions_by_id.keys())
+        analysis_content: str,
+        user_ids: list[int],
+    ) -> str:
+        """
+        Pass analysis result as-is and existing conclusions from DB as-is to the model.
+        Save parsed merge response to DB. Returns raw merge response from DeepSeek.
+        """
         existing_by_id = await self.storage.users.get_conclusions_by_ids(user_ids)
-        users_with_existing = [uid for uid in user_ids if uid in existing_by_id]
-        final_by_id = dict(new_conclusions_by_id)
-        merge_response: str | None = None
-        if users_with_existing:
-            items = [
-                {
-                    'user_id': uid,
-                    'existing': existing_by_id[uid],
-                    'new': new_conclusions_by_id[uid],
-                }
-                for uid in users_with_existing
-            ]
-            try:
-                merge_response = await self.deepseek.merge_conclusions(
-                    prompt_text,
-                    items,
-                )
-            except Exception:
-                logger.exception('DeepSeek merge conclusions failed')
-                raise AppException('Failed to merge conclusions with existing data')
-            merged_list = self._extract_user_conclusions(merge_response)
-            if not merged_list:
-                raise AppException(
-                    'DeepSeek returned invalid merge format. '
-                    'Expected a JSON list of objects with id.'
-                )
+        existing_list = [
+            {**existing_by_id[uid], 'id': uid}
+            for uid in user_ids
+            if uid in existing_by_id
+        ]
+        existing_content = json.dumps(
+            existing_list,
+            ensure_ascii=False,
+            indent=2,
+        )
+        try:
+            merge_response = await self.deepseek.merge_conclusions(
+                prompt_text,
+                analysis_content,
+                existing_content,
+            )
+        except Exception:
+            logger.exception('DeepSeek merge conclusions failed')
+            raise AppException('Failed to merge conclusions with existing data')
+        merged_list = self._extract_user_entries(merge_response)
+        if merged_list:
+            conclusions_to_save = []
             for item in merged_list:
                 user_id = self._safe_int(item.get('id'))
                 if user_id is None:
                     continue
-                conclusion = {
-                    k: v for k, v in item.items() if k != 'id'
-                }
-                if isinstance(conclusion, dict) and conclusion:
-                    final_by_id[user_id] = conclusion
-        conclusions_to_save = [
-            {'id': uid, 'conclusion': final_by_id[uid]}
-            for uid in user_ids
-        ]
-        try:
-            await self.storage.users.upsert_conclusions(conclusions_to_save)
-        except Exception:
-            logger.exception('Failed to persist conclusions')
-            raise AppException('Failed to save analysis results')
+                rest = {k: v for k, v in item.items() if k != 'id'}
+                if isinstance(rest, dict) and rest:
+                    conclusions_to_save.append({'id': user_id, 'conclusion': rest})
+            if conclusions_to_save:
+                try:
+                    await self.storage.users.upsert_conclusions(conclusions_to_save)
+                except Exception:
+                    logger.exception('Failed to persist conclusions')
+                    raise AppException('Failed to save analysis results')
         return merge_response
 
-    def _extract_user_conclusions(self, analysis: str) -> list[dict[str, Any]]:
+    def _extract_user_entries(self, analysis: str) -> list[dict[str, Any]]:
+        """Parse analysis/merge response: list of {id, desc, needs, offers, ...}. No 'conclusion' key."""
         payload = self._parse_json_payload(analysis)
         entries = self._extract_dict_list(payload)
         if not entries:
             return []
-        normalized_by_id: dict[int, dict[str, Any]] = {}
+        result: list[dict[str, Any]] = []
         for entry in entries:
             user_id = self._safe_int(entry.get('id'))
             if user_id is None:
                 continue
-            # id is used only for row mapping and is excluded from stored JSON.
-            normalized_by_id[user_id] = {
-                key: value
-                for key, value in entry.items()
-                if key != 'id'
-            }
-        return [
-            {'id': user_id, 'conclusion': conclusion}
-            for user_id, conclusion in normalized_by_id.items()
-        ]
+            result.append(dict(entry))
+        return result
 
     def _extract_dict_list(self, payload: Any) -> list[dict[str, Any]]:
         if isinstance(payload, list):
