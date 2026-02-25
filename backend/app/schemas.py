@@ -66,11 +66,13 @@ class RenderMessagesResponse(BaseModel):
 
 class AnalyzeRenderedMessagesRequest(BaseModel):
     prompt_id: int
+    merge_prompt_id: int
     messages: list[str] = Field(default_factory=list)
 
 
 class AnalyzeSelectedChannelsRequest(BaseModel):
     prompt_id: int
+    merge_prompt_id: int
     channel_ids: list[int] = Field(default_factory=list)
     date_from: datetime
     date_to: datetime
@@ -80,6 +82,7 @@ class AnalyzeRenderedMessagesResponse(BaseModel):
     prompt_id: int
     prompt_title: str
     analysis: str
+    merge_result: str | None = None
 
 
 class RefreshUserStatsResponse(BaseModel):

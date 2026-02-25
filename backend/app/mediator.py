@@ -289,32 +289,38 @@ class Mediator:
     async def analyze_rendered_messages(
         self,
         prompt_id: int,
+        merge_prompt_id: int,
         messages: list[str],
     ) -> dict[str, Any]:
         prompt, prompt_text = await self._get_analysis_prompt(prompt_id)
+        _, merge_prompt_text = await self._get_analysis_prompt(merge_prompt_id)
         normalized_messages = self._normalize_message_lines(messages)
         if not normalized_messages:
             raise AppException('No rendered messages to analyze')
-        analysis = await self._analyze_messages_with_chunking(
+        analysis_text, merge_result = await self._analyze_messages_with_chunking(
             prompt_id=prompt_id,
             prompt_text=prompt_text,
+            merge_prompt_text=merge_prompt_text,
             messages=normalized_messages,
             analysis_scope='rendered messages',
         )
         return {
             'prompt_id': prompt_id,
             'prompt_title': str(prompt.get('title') or prompt_id),
-            'analysis': analysis,
+            'analysis': analysis_text,
+            'merge_result': merge_result,
         }
 
     async def analyze_selected_channels(
         self,
         prompt_id: int,
+        merge_prompt_id: int,
         channel_ids: list[int],
         date_from: datetime,
         date_to: datetime,
     ) -> dict[str, Any]:
         prompt, prompt_text = await self._get_analysis_prompt(prompt_id)
+        _, merge_prompt_text = await self._get_analysis_prompt(merge_prompt_id)
         normalized_channel_ids: list[int] = []
         seen_channel_ids: set[int] = set()
         for channel_id in channel_ids or []:
@@ -337,27 +343,35 @@ class Mediator:
             normalized_messages = self._normalize_message_lines(rendered_messages)
             if not normalized_messages:
                 continue
-            analysis = await self._analyze_messages_with_chunking(
+            analysis_text, merge_result = await self._analyze_messages_with_chunking(
                 prompt_id=prompt_id,
                 prompt_text=prompt_text,
+                merge_prompt_text=merge_prompt_text,
                 messages=normalized_messages,
                 analysis_scope=f'channel {channel_id}',
             )
-            if analysis:
-                channel_reports.append((channel_id, analysis))
+            if analysis_text:
+                channel_reports.append((channel_id, analysis_text, merge_result))
         if not channel_reports:
             raise AppException('No rendered messages to analyze for selected channels')
         if len(channel_reports) == 1:
             analysis_text = channel_reports[0][1]
+            merge_result = channel_reports[0][2]
         else:
             analysis_text = '\n\n'.join(
-                f'### Channel {channel_id}\n{analysis}'
-                for channel_id, analysis in channel_reports
+                f'### Channel {channel_id}\n{text}'
+                for channel_id, text, _ in channel_reports
             )
+            merge_parts = []
+            for channel_id, _, merge_res in channel_reports:
+                if merge_res:
+                    merge_parts.append(f'### Channel {channel_id}\n{merge_res}')
+            merge_result = '\n\n'.join(merge_parts) if merge_parts else None
         return {
             'prompt_id': prompt_id,
             'prompt_title': str(prompt.get('title') or prompt_id),
             'analysis': analysis_text,
+            'merge_result': merge_result,
         }
 
     async def _get_analysis_prompt(
@@ -376,6 +390,7 @@ class Mediator:
         self,
         prompt_id: int,
         prompt_text: str,
+        merge_prompt_text: str,
         messages: list[str],
         analysis_scope: str,
     ) -> str:
@@ -404,14 +419,25 @@ class Mediator:
                 raise AppException('DeepSeek analysis request failed')
             if not analysis:
                 raise AppException('DeepSeek returned an empty analysis')
-            await self._save_user_conclusions_from_analysis(analysis)
             analyses.append(analysis)
-        if len(analyses) == 1:
-            return analyses[0]
-        return '\n\n'.join(
-            f'--- CHUNK {index}/{total_chunks} ---\n{analysis}'
-            for index, analysis in enumerate(analyses, start=1)
+        new_conclusions_by_id = self._aggregate_conclusions_from_analyses(analyses)
+        if not new_conclusions_by_id:
+            raise AppException(
+                'DeepSeek returned invalid analysis format. '
+                'Expected a JSON list of objects with id.'
+            )
+        merge_result = await self._merge_and_save_conclusions(
+            merge_prompt_text,
+            new_conclusions_by_id,
         )
+        if len(analyses) == 1:
+            analysis_text = analyses[0]
+        else:
+            analysis_text = '\n\n'.join(
+                f'--- CHUNK {index}/{total_chunks} ---\n{analysis}'
+                for index, analysis in enumerate(analyses, start=1)
+            )
+        return analysis_text, merge_result
 
     def _split_analysis_message_chunks(
         self,
@@ -466,18 +492,76 @@ class Mediator:
             if message is not None and str(message).strip()
         ]
 
-    async def _save_user_conclusions_from_analysis(self, analysis: str) -> None:
-        conclusions = self._extract_user_conclusions(analysis)
-        if not conclusions:
-            raise AppException(
-                'DeepSeek returned invalid analysis format. '
-                'Expected a JSON list of objects with id.'
-            )
+    def _aggregate_conclusions_from_analyses(
+        self,
+        analyses: list[str],
+    ) -> dict[int, dict[str, Any]]:
+        """Extract and aggregate conclusions by user_id from all analysis chunks (last wins)."""
+        result: dict[int, dict[str, Any]] = {}
+        for analysis in analyses:
+            for item in self._extract_user_conclusions(analysis):
+                user_id = item.get('id')
+                conclusion = item.get('conclusion')
+                if user_id is not None and isinstance(conclusion, dict):
+                    result[int(user_id)] = conclusion
+        return result
+
+    async def _merge_and_save_conclusions(
+        self,
+        prompt_text: str,
+        new_conclusions_by_id: dict[int, dict[str, Any]],
+    ) -> str | None:
+        """Load existing conclusions from DB; for users with existing, merge via LLM; then save all.
+        Returns raw merge response from DeepSeek, or None if no merge was performed."""
+        if not new_conclusions_by_id:
+            return None
+        user_ids = list(new_conclusions_by_id.keys())
+        existing_by_id = await self.storage.users.get_conclusions_by_ids(user_ids)
+        users_with_existing = [uid for uid in user_ids if uid in existing_by_id]
+        final_by_id = dict(new_conclusions_by_id)
+        merge_response: str | None = None
+        if users_with_existing:
+            items = [
+                {
+                    'user_id': uid,
+                    'existing': existing_by_id[uid],
+                    'new': new_conclusions_by_id[uid],
+                }
+                for uid in users_with_existing
+            ]
+            try:
+                merge_response = await self.deepseek.merge_conclusions(
+                    prompt_text,
+                    items,
+                )
+            except Exception:
+                logger.exception('DeepSeek merge conclusions failed')
+                raise AppException('Failed to merge conclusions with existing data')
+            merged_list = self._extract_user_conclusions(merge_response)
+            if not merged_list:
+                raise AppException(
+                    'DeepSeek returned invalid merge format. '
+                    'Expected a JSON list of objects with id.'
+                )
+            for item in merged_list:
+                user_id = self._safe_int(item.get('id'))
+                if user_id is None:
+                    continue
+                conclusion = {
+                    k: v for k, v in item.items() if k != 'id'
+                }
+                if isinstance(conclusion, dict) and conclusion:
+                    final_by_id[user_id] = conclusion
+        conclusions_to_save = [
+            {'id': uid, 'conclusion': final_by_id[uid]}
+            for uid in user_ids
+        ]
         try:
-            await self.storage.users.upsert_conclusions(conclusions)
+            await self.storage.users.upsert_conclusions(conclusions_to_save)
         except Exception:
-            logger.exception('Failed to persist DeepSeek conclusions')
-            raise AppException('Failed to save DeepSeek analysis results')
+            logger.exception('Failed to persist conclusions')
+            raise AppException('Failed to save analysis results')
+        return merge_response
 
     def _extract_user_conclusions(self, analysis: str) -> list[dict[str, Any]]:
         payload = self._parse_json_payload(analysis)

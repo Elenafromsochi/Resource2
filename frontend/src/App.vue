@@ -74,7 +74,7 @@
         </div>
         <div class="analysis-prompt">
           <label class="field-label" for="analysis-prompt-select">
-            Базовый промпт для анализа
+            Промпт для анализа
           </label>
           <select
             id="analysis-prompt-select"
@@ -85,6 +85,25 @@
             <option
               v-for="prompt in prompts"
               :key="`analysis-prompt-${prompt.id}`"
+              :value="prompt.id"
+            >
+              {{ prompt.title }}
+            </option>
+          </select>
+        </div>
+        <div class="analysis-prompt">
+          <label class="field-label" for="merge-prompt-select">
+            Промпт для объединения выводов
+          </label>
+          <select
+            id="merge-prompt-select"
+            v-model="selectedMergePromptId"
+            :disabled="promptsLoading || analyzeMessagesLoading || prompts.length === 0"
+          >
+            <option :value="null" disabled>Выберите промпт</option>
+            <option
+              v-for="prompt in prompts"
+              :key="`merge-prompt-${prompt.id}`"
               :value="prompt.id"
             >
               {{ prompt.title }}
@@ -221,7 +240,7 @@
         </div>
         <div v-if="analyzeMessagesResult" class="render-messages analysis-result">
           <div class="render-messages-header">
-            <h3>Результат анализа</h3>
+            <h3>Результат анализа (DeepSeek)</h3>
             <span class="render-messages-summary">
               Промпт: {{ analyzeMessagesResult.prompt_title }}
             </span>
@@ -237,6 +256,14 @@
           <div class="render-messages-body">
             <pre class="render-messages-content">{{ analyzeMessagesResult.analysis }}</pre>
           </div>
+          <template v-if="analyzeMessagesResult.merge_result">
+            <div class="render-messages-header render-messages-subheader">
+              <h3>Результат слияния выводов (DeepSeek)</h3>
+            </div>
+            <div class="render-messages-body">
+              <pre class="render-messages-content">{{ analyzeMessagesResult.merge_result }}</pre>
+            </div>
+          </template>
         </div>
         <div v-if="renderMessagesError" class="analysis-errors">
           <h3>Ошибка вывода сообщений</h3>
@@ -747,6 +774,7 @@ const renderMessagesLoading = ref(false);
 const renderMessagesResult = ref(null);
 const renderMessagesError = ref(null);
 const selectedAnalysisPromptId = ref(null);
+const selectedMergePromptId = ref(null);
 const analyzeMessagesLoading = ref(false);
 const analyzeMessagesResult = ref(null);
 const analyzeMessagesError = ref(null);
@@ -1225,13 +1253,21 @@ const refreshChannelLists = async () => {
 const syncSelectedAnalysisPrompt = () => {
   if (!Array.isArray(prompts.value) || prompts.value.length === 0) {
     selectedAnalysisPromptId.value = null;
+    selectedMergePromptId.value = null;
     return;
   }
-  const hasSelectedPrompt = prompts.value.some(
+  const hasAnalysis = prompts.value.some(
     (prompt) => prompt.id === selectedAnalysisPromptId.value,
   );
-  if (!hasSelectedPrompt) {
+  if (!hasAnalysis) {
     selectedAnalysisPromptId.value = prompts.value[0].id;
+  }
+  const hasMerge = prompts.value.some(
+    (prompt) => prompt.id === selectedMergePromptId.value,
+  );
+  if (!hasMerge) {
+    selectedMergePromptId.value =
+      prompts.value.length > 1 ? prompts.value[1].id : prompts.value[0].id;
   }
 };
 
@@ -1377,9 +1413,15 @@ const renderMessages = async () => {
 
 const analyzeRenderedMessages = async () => {
   const promptId = Number(selectedAnalysisPromptId.value);
+  const mergePromptId = Number(selectedMergePromptId.value);
   const messages = renderMessagesResult.value?.messages;
   if (!Number.isInteger(promptId) || promptId <= 0) {
-    analyzeMessagesError.value = "Выберите базовый промпт для анализа.";
+    analyzeMessagesError.value = "Выберите промпт для анализа.";
+    analyzeMessagesResult.value = null;
+    return;
+  }
+  if (!Number.isInteger(mergePromptId) || mergePromptId <= 0) {
+    analyzeMessagesError.value = "Выберите промпт для объединения выводов.";
     analyzeMessagesResult.value = null;
     return;
   }
@@ -1394,6 +1436,7 @@ const analyzeRenderedMessages = async () => {
   try {
     const { data } = await api.post("/channels/analyze-rendered-messages", {
       prompt_id: promptId,
+      merge_prompt_id: mergePromptId,
       messages,
     });
     analyzeMessagesResult.value = data;
@@ -1407,8 +1450,14 @@ const analyzeRenderedMessages = async () => {
 
 const analyzeSelectedChannelsMessages = async () => {
   const promptId = Number(selectedAnalysisPromptId.value);
+  const mergePromptId = Number(selectedMergePromptId.value);
   if (!Number.isInteger(promptId) || promptId <= 0) {
-    analyzeMessagesError.value = "Выберите базовый промпт для анализа.";
+    analyzeMessagesError.value = "Выберите промпт для анализа.";
+    analyzeMessagesResult.value = null;
+    return;
+  }
+  if (!Number.isInteger(mergePromptId) || mergePromptId <= 0) {
+    analyzeMessagesError.value = "Выберите промпт для объединения выводов.";
     analyzeMessagesResult.value = null;
     return;
   }
@@ -1425,6 +1474,7 @@ const analyzeSelectedChannelsMessages = async () => {
   try {
     const { data } = await api.post("/channels/analyze-selected-channels", {
       prompt_id: promptId,
+      merge_prompt_id: mergePromptId,
       channel_ids: selectedChannelIds.value,
       date_from: dateFrom,
       date_to: dateTo,
@@ -1964,6 +2014,12 @@ button:disabled {
 .render-messages-header h3 {
   margin: 0;
   font-size: 13px;
+}
+
+.render-messages-subheader {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e6ecf5;
 }
 
 .render-messages-summary {

@@ -7,7 +7,7 @@ class PromptsRepository(BaseRepository):
             """
             SELECT id, title, text, created_at, updated_at
             FROM prompts
-            ORDER BY updated_at DESC, id DESC
+            ORDER BY id
             """,
         )
         return [dict(row) for row in rows]

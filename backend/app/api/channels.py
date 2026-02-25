@@ -100,6 +100,7 @@ async def analyze_rendered_messages(
 ):
     return await request.app.state.mediator.analyze_rendered_messages(
         payload.prompt_id,
+        payload.merge_prompt_id,
         payload.messages,
     )
 
@@ -114,6 +115,7 @@ async def analyze_selected_channels(
 ):
     return await request.app.state.mediator.analyze_selected_channels(
         payload.prompt_id,
+        payload.merge_prompt_id,
         payload.channel_ids,
         payload.date_from,
         payload.date_to,
