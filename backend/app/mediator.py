@@ -281,8 +281,8 @@ class Mediator:
         if not rendered:
             return []
         format_hint = (
-            'FORMAT: datetime message_id user_id [@username] '
-            '[-> reply_message_id] [->> source_id|source_id-message_id|source_name]: text'
+            'FORMAT: timestamp message_id user_id [@username] '
+            '[reply to reply_message_id] [forwarded from source_id|source_id-message_id|source_name]: text'
         )
         return [format_hint, *rendered]
 
@@ -841,13 +841,13 @@ class Mediator:
             text = self._normalize_message_text(message.get('text'))
         if not text:
             return None
-        parts = [str(message.get('date')), str(message_id), user_tag]
+        parts = [str(int(message.get('date').timestamp())), str(message_id), user_tag]
         reply_id = self._get_reply_message_id(message)
         if reply_id is not None:
-            parts.append(f'-> {reply_id}')
+            parts.append(f'[reply to {reply_id}]')
         forward_reference = self._format_forward_reference(message)
         if forward_reference:
-            parts.append(f'->> {forward_reference}')
+            parts.append(f'[forwarded from {forward_reference}]')
         return f"{' '.join(parts)}: {text}"
 
     @staticmethod
