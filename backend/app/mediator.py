@@ -281,7 +281,7 @@ class Mediator:
         if not rendered:
             return []
         format_hint = (
-            'FORMAT: time message_id user_id [@username] '
+            'FORMAT: datetime message_id user_id [@username] '
             '[-> reply_message_id] [->> source_id|source_id-message_id|source_name]: text'
         )
         return [format_hint, *rendered]
@@ -760,9 +760,6 @@ class Mediator:
         message_id = self._safe_int(message.get('id'))
         if message_id is None:
             return None
-        message_time = self._format_message_time(message.get('date'))
-        if not message_time:
-            message_time = '00:00:00'
         user_id = self._get_message_user_id(message)
         if user_id is None:
             user_id = 0
@@ -772,7 +769,7 @@ class Mediator:
             text = self._normalize_message_text(message.get('text'))
         if not text:
             return None
-        parts = [message_time, str(message_id), user_tag]
+        parts = [str(message.get('date')), str(message_id), user_tag]
         reply_id = self._get_reply_message_id(message)
         if reply_id is not None:
             parts.append(f'-> {reply_id}')
@@ -780,18 +777,6 @@ class Mediator:
         if forward_reference:
             parts.append(f'->> {forward_reference}')
         return f"{' '.join(parts)}: {text}"
-
-    @staticmethod
-    def _format_message_time(value: Any) -> str | None:
-        if isinstance(value, datetime):
-            return value.strftime('%H:%M:%S')
-        if isinstance(value, str):
-            try:
-                parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-            except ValueError:
-                return None
-            return parsed.strftime('%H:%M:%S')
-        return None
 
     @staticmethod
     def _message_sort_key(message: dict[str, Any]) -> tuple[float, int]:
